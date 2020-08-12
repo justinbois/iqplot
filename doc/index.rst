@@ -1,7 +1,7 @@
 iqplot: Bokeh plots with one quantitative and *n* categorial variables
 =========================================================================
 
-The iqplot package (pronounced "Eye Queue Plot") enables high-level plotting for data sets with one quantitative variable and arbitrary many categorical variables.
+The iqplot package (pronounced "eye cue plot") enables high-level plotting for data sets with one quantitative variable and arbitrary many categorical variables.
 
 
 .. toctree::
@@ -24,6 +24,6 @@ The iqplot package (pronounced "Eye Queue Plot") enables high-level plotting for
 
 .. toctree::
    :maxdepth: 1
-   :caption: Credits and citation
+   :caption: License and citation
 
    credits_and_citation.rst
