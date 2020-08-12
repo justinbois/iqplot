@@ -9,7 +9,7 @@ This package generates plots of data with the following properties:
 - One variable is quantitative.
 - All other variables of interest, if any, are categorical.
 
-The first two letters of the package name are meant to indicated one (Roman number I) quantitative (Q) variable. 
+The first two letters of the package name are meant to indicate one (Roman number I) quantitative (Q) variable. 
 
 The subclass of data sets that contain a single quantitative variable (and possibly several categorical variables) abound in the biological sciences, which was the primary motivation for making this package in the first place.
 
