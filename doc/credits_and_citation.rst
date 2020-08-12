@@ -14,7 +14,7 @@ iqplot is available under an `MIT License <https://opensource.org/licenses/MIT>`
 Citing iqplot
 ====================
 
-It is best to cite the package using its DOI and version number. Here is a citation for version 0.1.2.
+It is best to cite the package using its DOI and version number. Here is a citation for version 0.1.3.
 
 .. code-block:: bibtex
 
@@ -23,6 +23,6 @@ It is best to cite the package using its DOI and version number. Here is a citat
       url = {http://dx.doi.org/10.22002/D1.1600},
       author = {Bois, Justin S.},
       keywords = {Github},
-      title = {justinbois/iqplot: Version 0.1.2
+      title = {justinbois/iqplot: Version 0.1.3
       year = {2020}
     }
