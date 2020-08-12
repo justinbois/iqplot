@@ -1,0 +1,14 @@
+Metadata-Version: 1.1
+Name: iqplot
+Version: 0.1.0
+Summary: Generate Bokeh plots for data sets with one quantitative variable.
+Home-page: https://github.com/justinbois/iqplot
+Author: Justin Bois
+Author-email: bois@caltech.edu
+License: BSD
+Download-URL: https://github.com/justinbois/iqplot/tarball/0.1.0
+Description: Generate Bokeh plots for data sets with one quantitative variable.
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3

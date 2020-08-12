@@ -1,0 +1,6 @@
+numpy
+xarray
+numba
+pandas
+bokeh
+colorcet
