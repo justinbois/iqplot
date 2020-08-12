@@ -1,4 +1,5 @@
-"""Utility functions for parsing categorical plots."""
+"""Utility functions for parsing inputs."""
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,37 @@ def _fig_dimensions(kwargs):
         kwargs["height"] = 300
 
     return kwargs
+
+
+def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
+    if q_axis not in ("x", "y"):
+        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
+
+    if horizontal:
+        if q_axis != horiz_q_axis:
+            raise RuntimeError(
+                "`horizontal` and `q_axis` kwargs in disagreement. "
+                "Use `q_axis`; `horizontal` is deprecated."
+            )
+        warnings.warn(
+            f"`horizontal` is deprecated. Use `q_axis`.", DeprecationWarning
+        )
+
+    if val is not None:
+        if q is None:
+            q = val
+        elif q != val:
+            raise RuntimeError(
+                "`val` and `q` in disagreement. Use `q`; `val` is deprecated."
+            )
+        warnings.warn(
+            f"`val` is deprecated. Use `q`. Using `q={q}.", DeprecationWarning
+        )
+
+    # Set horizontal for use in hidden functions
+    horizontal = q_axis == "x"
+
+    return q, horizontal
 
 
 def _data_cats(data, q, cats, show_legend):

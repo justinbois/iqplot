@@ -39,6 +39,7 @@ def ecdf(
     line_kwargs=None,
     conf_int_kwargs=None,
     horizontal=False,
+    val=None,
     **kwargs,
 ):
     """
@@ -117,6 +118,8 @@ def ecdf(
         kwargs to pass into patches depicting confidence intervals.
     horizontal : bool, default False
         Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when making
         the plot.
@@ -126,17 +129,7 @@ def ecdf(
     output : bokeh.plotting.Figure instance
         Plot populated with ECDFs.
     """
-    if q_axis not in ("x", "y"):
-        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
-
-    if horizontal and q_axis != "y":
-        raise RuntimeError(
-            "`horizontal` and `q_axis` kwargs in disagreement. "
-            "Use `q_axis`; `horizontal` is deprecated."
-        )
-
-    # Set horizontal for use in private functions
-    horizontal = q_axis == "y"
+    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
     if style == "formal" and complementary:
         raise NotImplementedError("Complementary formal ECDFs not yet implemented.")
@@ -208,9 +201,7 @@ def ecdf(
     df = data.copy()
     if kind == "collection":
         if style == "dots":
-            df[y] = df.groupby(cats)[q].transform(
-                _ecdf_y, complementary=complementary
-            )
+            df[y] = df.groupby(cats)[q].transform(_ecdf_y, complementary=complementary)
     elif kind == "colored":
         df[y] = df[q].transform(_ecdf_y, complementary=complementary)
         cols += [y]
@@ -335,6 +326,7 @@ def histogram(
     line_kwargs=None,
     fill_kwargs=None,
     horizontal=False,
+    val=None,
     **kwargs,
 ):
     """
@@ -395,6 +387,8 @@ def histogram(
         default {"fill_alpha": 0.3, "line_alpha": 0}.
     horizontal : bool, default False
         Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when making
         the plot.
@@ -404,14 +398,7 @@ def histogram(
     output : Bokeh figure
         Figure populated with histograms.
     """
-    if q_axis not in ("x", "y"):
-        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
-
-    if horizontal and q_axis != "y":
-        raise RuntimeError(
-            "`horizontal` and `q_axis` kwargs in disagreement. "
-            "Use `q_axis`; `horizontal` is deprecated."
-        )
+    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -440,9 +427,7 @@ def histogram(
             raise RuntimeError("No `order` is allowed if `cats` is None.")
         cats = "__cat"
 
-    cats, cols = utils._check_cat_input(
-        df, cats, q, None, None, palette, order, kwargs
-    )
+    cats, cols = utils._check_cat_input(df, cats, q, None, None, palette, order, kwargs)
 
     kwargs = utils._fig_dimensions(kwargs)
 

@@ -16,7 +16,7 @@ def strip(
     data=None,
     q=None,
     cats=None,
-    q_axis='x',
+    q_axis="x",
     palette=None,
     order=None,
     p=None,
@@ -28,6 +28,7 @@ def strip(
     marker_kwargs=None,
     jitter_kwargs=None,
     horizontal=False,
+    val=None,
     **kwargs,
 ):
     """
@@ -89,6 +90,8 @@ def strip(
         adjusted to 0.4.
     horizontal : bool, default True
         Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when
         instantiating the figure.
@@ -98,17 +101,7 @@ def strip(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
-    if q_axis not in ("x", "y"):
-        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
-
-    if horizontal and q_axis != "x":
-        raise RuntimeError(
-            "`horizontal` and `q_axis` kwargs in disagreement. "
-            "Use `q_axis`; `horizontal` is deprecated."
-        )
-
-    # Set horizontal for use in hidden functions
-    horizontal = q_axis == "x"
+    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -126,14 +119,10 @@ def strip(
             data, grouped, q, order, color_column, horizontal, kwargs
         )
     else:
-        if type(p.x_range) == bokeh.models.ranges.FactorRange and q_axis == 'x':
-            raise RuntimeError(
-                "`q_axis` is 'x', but `p` has a categorical x-axis."
-            )
-        elif type(p.y_range) == bokeh.models.ranges.FactorRange and q_axis == 'y':
-            raise RuntimeError(
-                "`q_axis` is 'y', but `p` has a categorical y-axis."
-            )
+        if type(p.x_range) == bokeh.models.ranges.FactorRange and q_axis == "x":
+            raise RuntimeError("`q_axis` is 'x', but `p` has a categorical x-axis.")
+        elif type(p.y_range) == bokeh.models.ranges.FactorRange and q_axis == "y":
+            raise RuntimeError("`q_axis` is 'y', but `p` has a categorical y-axis.")
 
         _, factors, color_factors = _get_cat_range(
             data, grouped, order, color_column, horizontal
@@ -172,10 +161,10 @@ def strip(
     marker_fun = utils._get_marker(p, marker)
 
     if marker == "dash":
-        if "angle" not in marker_kwargs and q_axis == 'x':
+        if "angle" not in marker_kwargs and q_axis == "x":
             marker_kwargs["angle"] = np.pi / 2
         if "size" not in marker_kwargs:
-            if q_axis == 'x':
+            if q_axis == "x":
                 marker_kwargs["size"] = p.plot_height * 0.25 / len(grouped)
             else:
                 marker_kwargs["size"] = p.plot_width * 0.25 / len(grouped)
@@ -185,7 +174,7 @@ def strip(
     if show_legend and "legend_field" not in marker_kwargs:
         marker_kwargs["legend_field"] = "__label"
 
-    if q_axis == 'x':
+    if q_axis == "x":
         x = q
         if jitter:
             jitter_kwargs["range"] = p.y_range
@@ -211,7 +200,7 @@ def box(
     data=None,
     q=None,
     cats=None,
-    q_axis='x',
+    q_axis="x",
     palette=None,
     order=None,
     p=None,
@@ -225,6 +214,7 @@ def box(
     outlier_kwargs=None,
     display_outliers=None,
     horizontal=False,
+    val=None,
     **kwargs,
 ):
     """
@@ -288,6 +278,8 @@ def box(
         when constructing the outliers for the box plot.
     horizontal : bool, default True
         Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
     kwargs
         Kwargs that are passed to bokeh.plotting.figure() in contructing
         the figure.
@@ -308,20 +300,13 @@ def box(
     between the ends of the whiskers are considered outliers and are
     plotted as individual points.
     """
-    if q_axis not in ("x", "y"):
-        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
-
-    if horizontal and q_axis != "x":
-        raise RuntimeError(
-            "`horizontal` and `q_axis` kwargs in disagreement. "
-            "Use `q_axis`; `horizontal` is deprecated."
-        )
-
-    # Set horizontal for use in hidden functions
-    horizontal = q_axis == "x"
+    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if display_outliers is not None:
-        warnings.warn(f'`display_outliers` is deprecated. Use `display_points`. Using `display_points={display_outliers} for this function call.', DeprecationWarning)
+        warnings.warn(
+            f"`display_outliers` is deprecated. Use `display_points`. Using `display_points={display_outliers}.",
+            DeprecationWarning,
+        )
         display_points = display_outliers
 
     if palette is None:
@@ -363,7 +348,7 @@ def box(
     elif "line_color" not in median_kwargs:
         median_kwargs["line_color"] = white
 
-    if q_axis == 'x':
+    if q_axis == "x":
         if "height" in box_kwargs:
             warnings.warn("'height' entry in `box_kwargs` ignored; using `box_width`.")
             del box_kwargs["height"]
@@ -413,7 +398,7 @@ def box(
             "cat", palette=palette, factors=factors
         )
 
-    if q_axis == 'x':
+    if q_axis == "x":
         p.segment(
             source=source_box,
             y0="cat",
@@ -550,9 +535,7 @@ def _get_cat_range(df, grouped, order, color_column, horizontal):
     return cat_range, factors, color_factors
 
 
-def _cat_figure(
-    df, grouped, q, order, color_column, horizontal, kwargs
-):
+def _cat_figure(df, grouped, q, order, color_column, horizontal, kwargs):
     cat_range, factors, color_factors = _get_cat_range(
         df, grouped, order, color_column, horizontal
     )

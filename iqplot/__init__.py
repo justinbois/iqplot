@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Top-level package for bokeh-catplot."""
+"""Top-level package for iqplot."""
 
 # Force showing deprecation warnings.
 import re
@@ -16,4 +16,4 @@ from .dist import *
 
 __author__ = """Justin Bois"""
 __email__ = "bois@caltech.edu"
-__version__ = "0.1.2"
+__version__ = "0.1.3"
