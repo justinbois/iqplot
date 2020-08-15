@@ -41,7 +41,7 @@ def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
         )
 
     # Set horizontal for use in hidden functions
-    horizontal = q_axis == "x"
+    horizontal = q_axis == horiz_q_axis
 
     return q, horizontal
 

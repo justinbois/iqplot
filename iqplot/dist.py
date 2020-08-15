@@ -227,7 +227,7 @@ def ecdf(
     if tooltips is not None:
         if style in ["formal", "staircase"]:
             warnings.warn(
-                "Cannot have tooltips for formal ECDFs because there are not point to hover over. Omitting tooltips"
+                "Cannot have tooltips for formal ECDFs because there are no points to hover over. Omitting tooltips"
             )
         else:
             p.add_tools(bokeh.models.HoverTool(tooltips=tooltips))
