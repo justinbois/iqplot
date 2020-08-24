@@ -5,13 +5,10 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import xarray
-import numba
 
 import colorcet
 
 import bokeh.models
-import bokeh.palettes
 import bokeh.plotting
 
 from . import utils

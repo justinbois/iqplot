@@ -6,7 +6,6 @@ import pandas as pd
 import colorcet
 
 import bokeh.models
-import bokeh.palettes
 import bokeh.plotting
 
 from . import utils
