@@ -17,7 +17,6 @@ iqplot has the following dependencies.
 - NumPy_
 - Pandas_
 - xarray_
-- Numba_
 - Bokeh_
 - colorcet_
 
@@ -25,6 +24,5 @@ iqplot has the following dependencies.
 .. _NumPy: http://www.numpy.org/
 .. _Pandas: http://pandas.pydata.org/
 .. _xarray: http://xarray.pydata.org/
-.. _Numba: http://numba.pydata.org/
 .. _Bokeh: https://docs.bokeh.org/
 .. _colorcet: https://colorcet.holoviz.org/

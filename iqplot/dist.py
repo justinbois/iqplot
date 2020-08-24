@@ -131,9 +131,6 @@ def ecdf(
     """
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
-    if q_axis not in ["x", "y"]:
-        raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
-
     if style == "formal" and complementary:
         raise NotImplementedError("Complementary formal ECDFs not yet implemented.")
 
@@ -402,9 +399,6 @@ def histogram(
         Figure populated with histograms.
     """
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
-
-    if q_axis not in ["x", "y"]:
-        raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
