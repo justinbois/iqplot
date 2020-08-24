@@ -19,15 +19,16 @@ def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
     if q_axis not in ("x", "y"):
         raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
 
-    if horizontal:
-        if q_axis != horiz_q_axis:
+    if horizontal is not None:
+        if (horizontal and q_axis != horiz_q_axis) or (
+            not horizontal and q_axis == horiz_q_axis
+        ):
             raise RuntimeError(
                 "`horizontal` and `q_axis` kwargs in disagreement. "
                 "Use `q_axis`; `horizontal` is deprecated."
             )
-        warnings.warn(
-            f"`horizontal` is deprecated. Use `q_axis`.", DeprecationWarning
-        )
+
+        warnings.warn(f"`horizontal` is deprecated. Use `q_axis`.", DeprecationWarning)
 
     if val is not None:
         if q is None:
@@ -36,14 +37,12 @@ def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
             raise RuntimeError(
                 "`val` and `q` in disagreement. Use `q`; `val` is deprecated."
             )
+
         warnings.warn(
             f"`val` is deprecated. Use `q`. Using `q={q}.", DeprecationWarning
         )
 
-    # Set horizontal for use in hidden functions
-    horizontal = q_axis == horiz_q_axis
-
-    return q, horizontal
+    return q
 
 
 def _data_cats(data, q, cats, show_legend):

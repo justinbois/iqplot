@@ -38,7 +38,7 @@ def ecdf(
     marker_kwargs=None,
     line_kwargs=None,
     conf_int_kwargs=None,
-    horizontal=False,
+    horizontal=None,
     val=None,
     **kwargs,
 ):
@@ -94,7 +94,7 @@ def ecdf(
             - staircase: ECDF is plotted as a traditional staircase.
             - formal: Strictly adhere to the definition of an ECDF.
     conf_int : bool, default False
-        If True, display a confidence interval on the ECDF.
+        If True, display confidence interval of ECDF.
     ptiles : list, default [2.5, 97.5]
         The percentiles to use for the confidence interval. Ignored if
         `conf_int` is False.
@@ -116,7 +116,7 @@ def ecdf(
         Kwargs to be passed to `p.line()`, `p.ray()`, and `p.segment()`.
     conf_int_kwargs : dict
         kwargs to pass into patches depicting confidence intervals.
-    horizontal : bool, default False
+    horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
@@ -129,7 +129,10 @@ def ecdf(
     output : bokeh.plotting.Figure instance
         Plot populated with ECDFs.
     """
-    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
+    q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
+
+    if q_axis not in ["x", "y"]:
+        raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
 
     if style == "formal" and complementary:
         raise NotImplementedError("Complementary formal ECDFs not yet implemented.")
@@ -242,7 +245,7 @@ def ecdf(
                     p,
                     g[q],
                     complementary=complementary,
-                    horizontal=horizontal,
+                    q_axis=q_axis,
                     n_bs_reps=n_bs_reps,
                     ptiles=ptiles,
                     **conf_int_kwargs,
@@ -257,7 +260,7 @@ def ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
-                    horizontal=horizontal,
+                    q_axis=q_axis,
                     line_kwargs=line_kwargs,
                 )
             elif style == "dots":
@@ -270,7 +273,7 @@ def ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
-                    horizontal=horizontal,
+                    q_axis=q_axis,
                     marker_kwargs=marker_kwargs,
                     line_kwargs=line_kwargs,
                 )
@@ -288,7 +291,7 @@ def ecdf(
                 p,
                 df[q],
                 complementary=complementary,
-                horizontal=horizontal,
+                q_axis=q_axis,
                 n_bs_reps=n_bs_reps,
                 ptiles=ptiles,
                 **conf_int_kwargs,
@@ -307,7 +310,7 @@ def ecdf(
             else:
                 marker_fun(source=source, x=q, y=y, **mkwargs)
 
-    return _ecdf_legend(p, complementary, horizontal, click_policy, show_legend)
+    return _ecdf_legend(p, complementary, q_axis, click_policy, show_legend)
 
 
 def histogram(
@@ -325,7 +328,7 @@ def histogram(
     click_policy="hide",
     line_kwargs=None,
     fill_kwargs=None,
-    horizontal=False,
+    horizontal=None,
     val=None,
     **kwargs,
 ):
@@ -385,7 +388,7 @@ def histogram(
         Keyword arguments to pass to `p.patch()` when making the fill
         for the step-filled histogram. Ignored if `kind = 'step'`. By
         default {"fill_alpha": 0.3, "line_alpha": 0}.
-    horizontal : bool, default False
+    horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
@@ -398,7 +401,10 @@ def histogram(
     output : Bokeh figure
         Figure populated with histograms.
     """
-    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
+    q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
+
+    if q_axis not in ["x", "y"]:
+        raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -518,7 +524,7 @@ def histogram(
     return p
 
 
-def _staircase_ecdf(p, data, complementary=False, horizontal=False, line_kwargs={}):
+def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
     """
     Create a plot of an ECDF.
 
@@ -532,8 +538,8 @@ def _staircase_ecdf(p, data, complementary=False, horizontal=False, line_kwargs=
     complementary : bool, default False
         If True, plot the empirical complementary cumulative
         distribution functon.
-    horizontal : bool, default False
-        If True, quantitative values are plotted on the y-axis.
+    q_axis : str, default 'x'
+        Which axis has the quantitative variable.
     line_kwargs : dict
         kwargs to be passed into p.line and p.ray.
 
@@ -549,20 +555,20 @@ def _staircase_ecdf(p, data, complementary=False, horizontal=False, line_kwargs=
     x, y = _ecdf_vals(data, True, complementary)
 
     # Line of steps
-    if horizontal:
+    if q_axis == "y":
         p.line(y, x, **line_kwargs)
-    else:
+    elif q_axis == "x":
         p.line(x, y, **line_kwargs)
 
     # Rays for ends
-    if horizontal:
+    if q_axis == "y":
         if complementary:
             p.ray(1, x[0], None, -np.pi / 2, **line_kwargs)
             p.ray(0, x[-1], None, np.pi / 2, **line_kwargs)
         else:
             p.ray(0, x[0], None, -np.pi / 2, **line_kwargs)
             p.ray(1, x[-1], None, np.pi / 2, **line_kwargs)
-    else:
+    elif q_axis == "x":
         if complementary:
             p.ray(x[0], 1, None, np.pi, **line_kwargs)
             p.ray(x[-1], 0, None, 0, **line_kwargs)
@@ -574,7 +580,7 @@ def _staircase_ecdf(p, data, complementary=False, horizontal=False, line_kwargs=
 
 
 def _formal_ecdf(
-    p, data, complementary=False, horizontal=False, marker_kwargs={}, line_kwargs={}
+    p, data, complementary=False, q_axis="x", marker_kwargs={}, line_kwargs={}
 ):
     """
     Create a plot of an ECDF.
@@ -609,14 +615,14 @@ def _formal_ecdf(
     unfilled_kwargs = marker_kwargs.copy()
     unfilled_kwargs["fill_color"] = "white"
 
-    if horizontal:
+    if q_axis == "y":
         p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
         p.ray(0, x[0], angle=-np.pi / 2, length=0, **line_kwargs)
         p.ray(1, x[-1], angle=np.pi / 2, length=0, **line_kwargs)
         p.circle(y, x, **marker_kwargs)
         p.circle([0], [0], **unfilled_kwargs)
         p.circle(y[:-1], x[1:], **unfilled_kwargs)
-    else:
+    elif q_axis == "x":
         p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
         p.ray(x[0], 0, angle=np.pi, length=0, **line_kwargs)
         p.ray(x[-1], 1, angle=0, length=0, **line_kwargs)
@@ -681,46 +687,92 @@ def _ecdf_conf_int(
     p,
     data,
     complementary=False,
-    horizontal=False,
+    q_axis="x",
     n_bs_reps=1000,
     ptiles=[2.5, 97.5],
     **kwargs,
 ):
-    """Add an ECDF confidence interval to a plot."""
+    """Add an ECDF confidence interval to a plot.
+
+    This method of computing a confidence interval can be thought of as
+    computing confidence intervals of the *inverse* ECDF in the sense
+    that we compute a confidence interval for the x-values for each of
+    the discrete values of the ECDF. This is equivalent to computing
+    bootstrap confidence intervals for the ECDF. Here is why.
+
+    Imagine we draw bootstrap samples and for each we make an ECDF.
+    Let's say we make 5 such ECDFs and we wish to compute a 60%
+    confidence interval. (You can generalize to arbitrary number of
+    ECDFs and confidence interval.)
+
+    Each of these 5 ECDFs can be defined as starting at the same point
+    and ending at the same point. Specifically, they start at
+    x = min(data), y = 0 and end at x = max(data), y = 1. Furthermore,
+    they are all monotonically increasing functions.
+
+    Now, let's say we are constructing a confidence interval for the
+    ECDF at position x. To do so, we put a dot on the second ECDF from
+    the top at x and a dot on the second ECDF from the bottom. This
+    gives us the middle 60% of ECDF values.
+
+    Now, say we are constructing a confidence interval for the IECDF. We
+    go to ECDF value y and we find the second ECDF from the left and
+    place a dot on it. We also put a dot on the second ECDF from the
+    right.
+
+    Because all ECDFs are monotonic and start and end at the same
+    points, the dot we put on the second-leftmost ECDF is also on the
+    second curve from the top for some other x. Similarly, the
+    second-rightmost ECDF is also on the second curve from the bottom
+    for some other x. (You can sketch this out, and it becomes clear.)
+
+    So, any dot we put on an ECDF for computing a confidence interval
+    for an IECDF is also a dot we would put on an ECDF for computing a
+    confidence  of the ECDF. If we want to compute the confidence
+    interval over the whole domain of x-values, we will cover the same
+    set of points if we compute the confidence interval of the ECDF or
+    the IECDF. So, we end up filling between the same two sets of
+    curves.
+
+    It turns out that the IECDF formulation is actually much easier to
+    implement.
+    """
     data = utils._convert_data(data)
-    x_plot = np.sort(np.unique(data))
+
     bs_reps = np.array(
-        [
-            _ecdf_arbitrary_points(np.random.choice(data, size=len(data)), x_plot)
-            for _ in range(n_bs_reps)
-        ]
+        [np.sort(np.random.choice(data, size=len(data))) for _ in range(n_bs_reps)]
     )
 
     # Compute the confidence intervals
-    ecdf_low, ecdf_high = np.percentile(np.array(bs_reps), ptiles, axis=0)
+    iecdf_low, iecdf_high = np.percentile(np.array(bs_reps), ptiles, axis=0)
+
+    # y-values for ECDFs
+    y = np.arange(1, len(data) + 1) / len(data)
 
     # Make them staircases
-    _, ecdf_low = _to_staircase(x=x_plot, y=ecdf_low)
-    x_plot, ecdf_high = _to_staircase(x=x_plot, y=ecdf_high)
+    x_low, y_plot = _to_staircase(x=iecdf_low, y=y)
+    x_high, _ = _to_staircase(x=iecdf_high, y=y)
 
-    if horizontal:
+    if q_axis == "y":
         if complementary:
             p = utils._fill_between(
-                p, x1=1 - ecdf_low, y1=x_plot, x2=1 - ecdf_high, y2=x_plot, **kwargs
+                p, x1=1 - y_plot, y1=x_low, x2=1 - y_plot, y2=x_high, **kwargs
             )
         else:
             p = utils._fill_between(
-                p, x1=ecdf_low, y1=x_plot, x2=ecdf_high, y2=x_plot, **kwargs
+                p, x1=y_plot, y1=x_low, x2=y_plot, y2=x_high, **kwargs
+            )
+    elif q_axis == "x":
+        if complementary:
+            p = utils._fill_between(
+                p, x1=x_low, y1=1 - y_plot, x2=x_high, y2=1 - y_plot, **kwargs
+            )
+        else:
+            p = utils._fill_between(
+                p, x1=x_low, y1=y_plot, x2=x_high, y2=y_plot, **kwargs
             )
     else:
-        if complementary:
-            p = utils._fill_between(
-                p, x1=x_plot, y1=1 - ecdf_low, x2=x_plot, y2=1 - ecdf_high, **kwargs
-            )
-        else:
-            p = utils._fill_between(
-                p, x1=x_plot, y1=ecdf_low, x2=x_plot, y2=ecdf_high, **kwargs
-            )
+        raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
 
     return p
 
@@ -752,37 +804,14 @@ def _ecdf_y(data, complementary=False):
         return data.rank(method="first") / len(data)
 
 
-@numba.njit
-def _ecdf_arbitrary_points(data, x):
-    """Give the value of an ECDF at arbitrary points x."""
-    y = np.arange(len(data) + 1) / len(data)
-    return y[np.searchsorted(np.sort(data), x, side="right")]
-
-
-@numba.njit
-def _y_ecdf(data, x):
-    y = np.arange(len(data) + 1) / len(data)
-    return y[np.searchsorted(np.sort(data), x, side="right")]
-
-
-@numba.njit
-def _draw_ecdf_bootstrap(L, n, n_bs_reps=100000):
-    x = np.arange(L + 1)
-    ys = np.empty((n_bs_reps, len(x)))
-    for i in range(n_bs_reps):
-        draws = np.random.randint(0, L + 1, size=n)
-        ys[i, :] = _y_ecdf(draws, x)
-    return ys
-
-
-def _ecdf_legend(p, complementary, horizontal, click_policy, show_legend):
+def _ecdf_legend(p, complementary, q_axis, click_policy, show_legend):
     if show_legend:
-        if horizontal:
+        if q_axis == "y":
             if complementary:
                 p.legend.location = "bottom_left"
             else:
                 p.legend.location = "top_left"
-        else:
+        elif q_axis == "x":
             if complementary:
                 p.legend.location = "top_right"
             else:

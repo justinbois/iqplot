@@ -27,7 +27,7 @@ def strip(
     jitter=False,
     marker_kwargs=None,
     jitter_kwargs=None,
-    horizontal=False,
+    horizontal=None,
     val=None,
     **kwargs,
 ):
@@ -88,7 +88,7 @@ def strip(
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
         adjusted to 0.4.
-    horizontal : bool, default True
+    horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
@@ -101,7 +101,7 @@ def strip(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
-    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
+    q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -116,7 +116,7 @@ def strip(
 
     if p is None:
         p, factors, color_factors = _cat_figure(
-            data, grouped, q, order, color_column, horizontal, kwargs
+            data, grouped, q, order, color_column, q_axis, kwargs
         )
     else:
         if type(p.x_range) == bokeh.models.ranges.FactorRange and q_axis == "x":
@@ -125,7 +125,7 @@ def strip(
             raise RuntimeError("`q_axis` is 'y', but `p` has a categorical y-axis.")
 
         _, factors, color_factors = _get_cat_range(
-            data, grouped, order, color_column, horizontal
+            data, grouped, order, color_column, q_axis
         )
 
     if tooltips is not None:
@@ -213,7 +213,7 @@ def box(
     whisker_kwargs=None,
     outlier_kwargs=None,
     display_outliers=None,
-    horizontal=False,
+    horizontal=None,
     val=None,
     **kwargs,
 ):
@@ -276,7 +276,7 @@ def box(
     outlier_kwargs : dict, default None
         A dictionary of kwargs to be passed into `p.circle()`
         when constructing the outliers for the box plot.
-    horizontal : bool, default True
+    horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
@@ -300,7 +300,7 @@ def box(
     between the ends of the whiskers are considered outliers and are
     plotted as individual points.
     """
-    q, horizontal = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
+    q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if display_outliers is not None:
         warnings.warn(
@@ -361,12 +361,10 @@ def box(
 
     if p is None:
         p, factors, color_factors = _cat_figure(
-            data, grouped, q, order, None, horizontal, kwargs
+            data, grouped, q, order, None, q_axis, kwargs
         )
     else:
-        _, factors, color_factors = _get_cat_range(
-            data, grouped, order, None, horizontal
-        )
+        _, factors, color_factors = _get_cat_range(data, grouped, order, None, q_axis)
 
     marker_fun = utils._get_marker(p, outlier_marker)
 
@@ -508,7 +506,7 @@ def box(
     return p
 
 
-def _get_cat_range(df, grouped, order, color_column, horizontal):
+def _get_cat_range(df, grouped, order, color_column, q_axis):
     if order is None:
         if isinstance(list(grouped.groups.keys())[0], tuple):
             factors = tuple(
@@ -522,9 +520,9 @@ def _get_cat_range(df, grouped, order, color_column, horizontal):
         else:
             factors = tuple([str(entry) for entry in order])
 
-    if horizontal:
+    if q_axis == "x":
         cat_range = bokeh.models.FactorRange(*(factors[::-1]))
-    else:
+    elif q_axis == "y":
         cat_range = bokeh.models.FactorRange(*factors)
 
     if color_column is None:
@@ -535,14 +533,14 @@ def _get_cat_range(df, grouped, order, color_column, horizontal):
     return cat_range, factors, color_factors
 
 
-def _cat_figure(df, grouped, q, order, color_column, horizontal, kwargs):
+def _cat_figure(df, grouped, q, order, color_column, q_axis, kwargs):
     cat_range, factors, color_factors = _get_cat_range(
-        df, grouped, order, color_column, horizontal
+        df, grouped, order, color_column, q_axis
     )
 
     kwargs = utils._fig_dimensions(kwargs)
 
-    if horizontal:
+    if q_axis == "x":
         if "x_axis_label" not in kwargs:
             kwargs["x_axis_label"] = q
 
@@ -551,7 +549,7 @@ def _cat_figure(df, grouped, q, order, color_column, horizontal, kwargs):
             del kwargs["y_axis_type"]
 
         kwargs["y_range"] = cat_range
-    else:
+    elif q_axis == "y":
         if "y_axis_label" not in kwargs:
             kwargs["y_axis_label"] = q
 
