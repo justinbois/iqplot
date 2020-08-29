@@ -21,11 +21,13 @@ def strip(
     p=None,
     show_legend=False,
     color_column=None,
+    parcoord_column=None,
     tooltips=None,
     marker="circle",
     jitter=False,
     marker_kwargs=None,
     jitter_kwargs=None,
+    parcoord_kwargs=None,
     horizontal=None,
     val=None,
     **kwargs,
@@ -37,7 +39,7 @@ def strip(
     ----------
     data : Pandas DataFrame, 1D Numpy array, or xarray
         DataFrame containing tidy data for plotting.  If a Numpy array,
-        a single category is assumed and a box plot generated from
+        a single category is assumed and a strip plot generated from
         data.
     q : hashable
         Name of column to use as quantitative variable if `data` is a
@@ -62,9 +64,17 @@ def strip(
         figure `p`.
     show_legend : bool, default False
         If True, display legend.
-    color_column : str, default None
+    color_column : hashable, default None
         Column of `data` to use in determining color of glyphs. If None,
         then `cats` is used.
+    parcoord_column : hashable, default None
+        Column of `data` to use to construct a parallel coordinate plot.
+        In this plot, respective data points across categories are
+        connected with lines. If not None, the data in this column must
+        follow the following rule: If there are n_cats categories, each
+        unique entry in the column can appear at most n_cats times.
+        Furthermore, no entry in the column may appear with the same
+        row with the same category more than once.
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
@@ -100,6 +110,8 @@ def strip(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
+    # if parcoord_column is not None:
+
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if palette is None:
@@ -108,7 +120,7 @@ def strip(
     data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend)
 
     cats, cols = utils._check_cat_input(
-        data, cats, q, color_column, tooltips, palette, order, kwargs
+        data, cats, q, color_column, parcoord_column, tooltips, palette, order, kwargs
     )
 
     grouped = data.groupby(cats, sort=False)
@@ -190,6 +202,41 @@ def strip(
             x = "cat"
         p.xgrid.grid_line_color = None
 
+    if parcoord_column is not None:
+        if parcoord_kwargs is None:
+            line_color = "gray"
+            parcoord_kwargs = {}
+        elif type(parcoord_kwargs) != dict:
+            raise RuntimeError("`parcoord_kwargs` must be a dict.")
+
+        if "color" in parcoord_kwargs and "line_color" not in parcoord_kwargs:
+            line_color = parcoord_kwargs.pop("color")
+        else:
+            line_color = parcoord_kwargs.pop("line_color", "gray")
+
+        grouped_parcoord = data.groupby(parcoord_column)
+        xs = []
+        ys = []
+        for t, g in grouped_parcoord:
+            xy = []
+            for _, r in g.iterrows():
+                xy.append([tuple([r[cat] for cat in cats]), r[q]])
+
+            if xy != []:
+                xy.sort(key=lambda a: factors.index(a[0]))
+                xs_pc = []
+                ys_pc = []
+                for pair in xy:
+                    xs_pc.append(pair[0])
+                    ys_pc.append(pair[1])
+                xs.append(xs_pc)
+                ys.append(ys_pc)
+
+        source_pc = bokeh.models.ColumnDataSource(dict(xs=xs, ys=ys))
+        p.multi_line(
+            source=source_pc, xs="xs", ys="ys", line_color=line_color, **parcoord_kwargs
+        )
+
     marker_fun(source=source, x=x, y=y, **marker_kwargs)
 
     return p
@@ -223,8 +270,8 @@ def box(
     ----------
     data : Pandas DataFrame, 1D Numpy array, or xarray
         DataFrame containing tidy data for plotting.  If a Numpy array,
-        a single category is assumed and a box plot generated from
-        data.
+        a single category is assumed and a box plot with a single box is
+        generated from data.
     q : hashable
         Name of column to use as quantitative variable if `data` is a
         Pandas DataFrame. Otherwise, `q` is used as the quantitative
@@ -314,7 +361,7 @@ def box(
     data, q, cats, _ = utils._data_cats(data, q, cats, False)
 
     cats, cols = utils._check_cat_input(
-        data, cats, q, None, None, palette, order, box_kwargs
+        data, cats, q, None, None, None, palette, order, box_kwargs
     )
 
     if outlier_kwargs is None:

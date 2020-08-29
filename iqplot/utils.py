@@ -7,10 +7,18 @@ import xarray
 
 
 def _fig_dimensions(kwargs):
-    if "width" not in kwargs and "plot_width" not in kwargs:
-        kwargs["width"] = 400
-    if "height" not in kwargs and "plot_height" not in kwargs:
-        kwargs["height"] = 300
+    if (
+        "width" not in kwargs
+        and "plot_width" not in kwargs
+        and "frame_width" not in kwargs
+    ):
+        kwargs["frame_width"] = 375
+    if (
+        "height" not in kwargs
+        and "plot_height" not in kwargs
+        and "frame_height" not in kwargs
+    ):
+        kwargs["frame_height"] = 275
 
     return kwargs
 
@@ -182,7 +190,9 @@ def _cols_to_keep(cats, q, color_column, tooltips):
     return list(set(cols))
 
 
-def _check_cat_input(df, cats, q, color_column, tooltips, palette, order, kwargs):
+def _check_cat_input(
+    df, cats, q, color_column, parcoord_column, tooltips, palette, order, kwargs
+):
     if df is None:
         raise RuntimeError("`df` argument must be provided.")
     if cats is None:
@@ -239,6 +249,17 @@ def _check_cat_input(df, cats, q, color_column, tooltips, palette, order, kwargs
                 raise RuntimeError(
                     f"Entry {entry} in grouping of input data but not present in as a group in the inputted data."
                 )
+
+    if parcoord_column is not None:
+        if parcoord_column not in df.columns:
+            raise RuntimeError(
+                f"{parcoord_column} is not a column in the inputted data frame"
+            )
+        if cats == "__dummy_cat":
+            raise RuntimeError(
+                "`cats` must be provided in `parcoord_column` is provided."
+            )
+        grouped = df.groupby(parcoord_column)
 
     return cats, cols
 
