@@ -11,5 +11,6 @@ API Reference
 
    box
    strip
+   stripbox
    histogram
    ecdf
