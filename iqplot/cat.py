@@ -69,12 +69,8 @@ def strip(
         then `cats` is used.
     parcoord_column : hashable, default None
         Column of `data` to use to construct a parallel coordinate plot.
-        In this plot, respective data points across categories are
-        connected with lines. If not None, the data in this column must
-        follow the following rule: If there are n_cats categories, each
-        unique entry in the column can appear at most n_cats times.
-        Furthermore, no entry in the column may appear with the same
-        row with the same category more than once.
+        Data points with like entries in the parcoord_column are
+        connected with lines.
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
@@ -110,8 +106,6 @@ def strip(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
-    # if parcoord_column is not None:
-
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if palette is None:
@@ -203,6 +197,8 @@ def strip(
         p.xgrid.grid_line_color = None
 
     if parcoord_column is not None:
+        source_pc = _parcoord_source(data, q, cats, q_axis, parcoord_column, factors)
+
         if parcoord_kwargs is None:
             line_color = "gray"
             parcoord_kwargs = {}
@@ -214,25 +210,6 @@ def strip(
         else:
             line_color = parcoord_kwargs.pop("line_color", "gray")
 
-        grouped_parcoord = data.groupby(parcoord_column)
-        xs = []
-        ys = []
-        for t, g in grouped_parcoord:
-            xy = []
-            for _, r in g.iterrows():
-                xy.append([tuple([r[cat] for cat in cats]), r[q]])
-
-            if xy != []:
-                xy.sort(key=lambda a: factors.index(a[0]))
-                xs_pc = []
-                ys_pc = []
-                for pair in xy:
-                    xs_pc.append(pair[0])
-                    ys_pc.append(pair[1])
-                xs.append(xs_pc)
-                ys.append(ys_pc)
-
-        source_pc = bokeh.models.ColumnDataSource(dict(xs=xs, ys=ys))
         p.multi_line(
             source=source_pc, xs="xs", ys="ys", line_color=line_color, **parcoord_kwargs
         )
@@ -298,8 +275,8 @@ def box(
     display_points : bool, default True
         If True, display outliers and any other points that arise from
         categories with fewer than `min_data` data points; otherwise
-        suppress them. This should only be False when making an overlay
-        with a strip plot.
+        suppress them. This should only be False when using the boxes
+        as annotation on another plot.
     outlier_marker : str, default 'circle'
         Name of marker to be used in the plot (ignored if `formal` is
         False). Must be one of['asterisk', 'circle', 'circle_cross',
@@ -552,6 +529,230 @@ def box(
     return p
 
 
+def stripbox(
+    data=None,
+    q=None,
+    cats=None,
+    q_axis="x",
+    palette=None,
+    order=None,
+    p=None,
+    show_legend=False,
+    top_level="strip",
+    color_column=None,
+    parcoord_column=None,
+    tooltips=None,
+    marker="circle",
+    jitter=False,
+    marker_kwargs=None,
+    jitter_kwargs=None,
+    parcoord_kwargs=None,
+    whisker_caps=True,
+    display_points=True,
+    min_data=5,
+    box_kwargs=None,
+    median_kwargs=None,
+    whisker_kwargs=None,
+    horizontal=None,
+    val=None,
+    **kwargs,
+):
+    """
+    Make a strip plot with a box plot as annotation.
+
+    Parameters
+    ----------
+    data : Pandas DataFrame, 1D Numpy array, or xarray
+        DataFrame containing tidy data for plotting.  If a Numpy array,
+        a single category is assumed and a strip plot generated from
+        data.
+    q : hashable
+        Name of column to use as quantitative variable if `data` is a
+        Pandas DataFrame. Otherwise, `q` is used as the quantitative
+        axis label.
+    cats : hashable or list of hashables
+        Name of column(s) to use as categorical variable(s).
+    q_axis : str, either 'x' or 'y', default 'x'
+        Axis along which the quantitative value varies.
+    palette : list of strings of hex colors, or single hex string
+        If a list, color palette to use. If a single string representing
+        a hex color, all glyphs are colored with that color. Default is
+        colorcet.b_glasbey_category10 from the colorcet package.
+    order : list or None
+        If not None, must be a list of unique group names when the input
+        data frame is grouped by `cats`. The order of the list specifies
+        the ordering of the categorical variables on the categorical
+        axis and legend. If None, the categories appear in the order in
+        which they appeared in the inputted data frame.
+    p : bokeh.plotting.Figure instance, or None (default)
+        If None, create a new figure. Otherwise, populate the existing
+        figure `p`.
+    top_level : str, default 'strip'
+        If 'box', the box plot is overlaid. If 'strip', the strip plot
+        is overlaid.
+    show_legend : bool, default False
+        If True, display legend.
+    color_column : hashable, default None
+        Column of `data` to use in determining color of glyphs. If None,
+        then `cats` is used.
+    parcoord_column : hashable, default None
+        Column of `data` to use to construct a parallel coordinate plot.
+        Data points with like entries in the parcoord_column are
+        connected with lines in the strip plot.
+    tooltips : list of 2-tuples
+        Specification for tooltips as per Bokeh specifications. For
+        example, if we want `col1` and `col2` tooltips, we can use
+        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
+    marker : str, default 'circle'
+        Name of marker to be used in the plot (ignored if `formal` is
+        False). Must be one of['asterisk', 'circle', 'circle_cross',
+        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
+        'inverted_triangle', 'square', 'square_cross', 'square_x',
+        'triangle', 'x']
+    jitter : bool, default False
+        If True, apply a jitter transform to the glyphs.
+    marker_kwargs : dict
+        Keyword arguments to pass when adding markers to the plot.
+        ["x", "y", "source", "cat", "legend"] are note allowed because
+        they are determined by other inputs.
+    jitter_kwargs : dict
+        Keyword arguments to be passed to `bokeh.transform.jitter()`. If
+        not specified, default is
+        `{'distribution': 'normal', 'width': 0.1}`. If the user
+        specifies `{'distribution': 'uniform'}`, the `'width'` entry is
+        adjusted to 0.4.
+    whisker_caps : bool, default True
+        If True, put caps on whiskers. If False, omit caps.
+    min_data : int, default 5
+        Minimum number of data points in a given category in order to
+        make a box and whisker. Otherwise, individual data points are
+        plotted as in a strip plot.
+    box_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.hbar()` or
+        `p.vbar()` when constructing the boxes for the box plot.
+    median_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.hbar()` or
+        `p.vbar()` when constructing the median line for the box plot.
+    whisker_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.segment()`
+        when constructing the whiskers for the box plot.
+    horizontal : bool or None, default None
+        Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
+    kwargs
+        Any kwargs to be passed to `bokeh.plotting.figure()` when
+        instantiating the figure.
+
+    Returns
+    -------
+    output : bokeh.plotting.Figure instance
+        Plot populated with a strip plot.
+    """
+    # Set defaults
+    if box_kwargs is None:
+        box_kwargs = dict(line_color="gray", fill_alpha=0)
+    if "color" not in box_kwargs and "line_color" not in box_kwargs:
+        box_kwargs["line_color"] = "gray"
+    if "fill_alpha" not in box_kwargs:
+        box_kwargs["fill_alpha"] = 0
+
+    if median_kwargs is None:
+        median_kwargs = dict(line_color="gray")
+    if "color" not in box_kwargs and "line_color" not in median_kwargs:
+        median_kwargs["line_color"] = "gray"
+
+    if whisker_kwargs is None:
+        whisker_kwargs = dict(line_color="gray")
+    if "color" not in box_kwargs and "line_color" not in whisker_kwargs:
+        whisker_kwargs["line_color"] = "gray"
+
+    if top_level == "box":
+        p = strip(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            show_legend=show_legend,
+            color_column=color_column,
+            parcoord_column=parcoord_column,
+            tooltips=tooltips,
+            marker=marker,
+            jitter=jitter,
+            marker_kwargs=marker_kwargs,
+            jitter_kwargs=jitter_kwargs,
+            parcoord_kwargs=parcoord_kwargs,
+            horizontal=horizontal,
+            val=val,
+            **kwargs,
+        )
+
+        p = box(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            display_points=False,
+            whisker_caps=whisker_caps,
+            min_data=min_data,
+            box_kwargs=box_kwargs,
+            median_kwargs=median_kwargs,
+            whisker_kwargs=whisker_kwargs,
+            horizontal=horizontal,
+            val=val,
+        )
+    elif top_level == "strip":
+        p = box(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            display_points=False,
+            whisker_caps=whisker_caps,
+            min_data=min_data,
+            box_kwargs=box_kwargs,
+            median_kwargs=median_kwargs,
+            whisker_kwargs=whisker_kwargs,
+            horizontal=horizontal,
+            val=val,
+            **kwargs,
+        )
+
+        p = strip(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            show_legend=show_legend,
+            color_column=color_column,
+            parcoord_column=parcoord_column,
+            tooltips=tooltips,
+            marker=marker,
+            jitter=jitter,
+            marker_kwargs=marker_kwargs,
+            jitter_kwargs=jitter_kwargs,
+            parcoord_kwargs=parcoord_kwargs,
+            horizontal=horizontal,
+            val=val,
+        )
+    else:
+        raise RuntimeError("Invalid `top_level`. Allowed values are 'box' and 'strip'.")
+
+    return p
+
+
 def _get_cat_range(df, grouped, order, color_column, q_axis):
     if order is None:
         if isinstance(list(grouped.groups.keys())[0], tuple):
@@ -624,6 +825,43 @@ def _cat_source(df, cats, cols, color_column):
         source_dict[color_column] = list(df[color_column].astype(str).values)
 
     return bokeh.models.ColumnDataSource(source_dict)
+
+
+def _parcoord_source(data, q, cats, q_axis, parcoord_column, factors):
+    if type(cats) not in [list, tuple]:
+        cats = [cats]
+        tuple_factors = False
+    else:
+        tuple_factors = True
+
+    grouped_parcoord = data.groupby(parcoord_column)
+    xs = []
+    ys = []
+    for t, g in grouped_parcoord:
+        xy = []
+        for _, r in g.iterrows():
+            if tuple_factors:
+                xy.append([tuple([r[cat] for cat in cats]), r[q]])
+            else:
+                xy.append([r[cats[0]], r[q]])
+
+        if xy != []:
+            if tuple_factors:
+                xy.sort(key=lambda a: factors.index(a[0]))
+            xs_pc = []
+            ys_pc = []
+            for pair in xy:
+                xs_pc.append(pair[0])
+                ys_pc.append(pair[1])
+
+            if q_axis == "y":
+                xs.append(xs_pc)
+                ys.append(ys_pc)
+            else:
+                xs.append(ys_pc)
+                ys.append(xs_pc)
+
+    return bokeh.models.ColumnDataSource(dict(xs=xs, ys=ys))
 
 
 def _outliers(data, min_data):

@@ -137,7 +137,7 @@ def ecdf(
     data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend)
 
     cats, cols = utils._check_cat_input(
-        data, cats, q, None, tooltips, palette, order, marker_kwargs
+        data, cats, q, None, None, tooltips, palette, order, marker_kwargs
     )
 
     kwargs = utils._fig_dimensions(kwargs)
@@ -315,6 +315,8 @@ def histogram(
     order=None,
     q_axis="x",
     p=None,
+    rug=True,
+    rug_height=0.05,
     show_legend=None,
     bins="freedman-diaconis",
     density=False,
@@ -322,6 +324,7 @@ def histogram(
     click_policy="hide",
     line_kwargs=None,
     fill_kwargs=None,
+    rug_kwargs=None,
     horizontal=None,
     val=None,
     **kwargs,
@@ -366,6 +369,12 @@ def histogram(
         square root rule to determine number of bins. If
         `freedman-diaconis`, uses the Freedman-Diaconis rule for number
         of bins.
+    rug : bool, default True
+        If True, also include a rug plot. If, however, `bins` is 'exact'
+        or 'integer', the `rug` kwarg is ignored.
+    rug_height : float, default 0.05
+        Height of the rug plot as a fraction of the highest point in the
+        histograms.
     density : bool, default False
         If True, normalize the histograms. Otherwise, base the
         histograms on counts.
@@ -382,6 +391,9 @@ def histogram(
         Keyword arguments to pass to `p.patch()` when making the fill
         for the step-filled histogram. Ignored if `kind = 'step'`. By
         default {"fill_alpha": 0.3, "line_alpha": 0}.
+    rug_kwargs : dict
+        Keyword arguments to pass to `p.multi_line()` when making the
+        rug plot.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
@@ -395,6 +407,9 @@ def histogram(
     output : Bokeh figure
         Figure populated with histograms.
     """
+    if type(bins) == str and bins in ["integer", "exact"]:
+        rug = False
+
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
     if palette is None:
@@ -424,7 +439,9 @@ def histogram(
             raise RuntimeError("No `order` is allowed if `cats` is None.")
         cats = "__cat"
 
-    cats, cols = utils._check_cat_input(df, cats, q, None, None, palette, order, kwargs)
+    cats, cols = utils._check_cat_input(
+        df, cats, q, None, None, None, palette, order, kwargs
+    )
 
     kwargs = utils._fig_dimensions(kwargs)
 
@@ -481,8 +498,12 @@ def histogram(
         p = bokeh.plotting.figure(**kwargs)
 
     # Explicitly loop to enable click policies on the legend (not possible with factors)
+    max_height = 0
     for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
         e0, f0 = _compute_histogram(g[q], bins, density)
+
+        max_height = max(f0.max(), max_height)
+
         line_kwargs["color"] = palette[i % len(palette)]
 
         if q_axis == "y":
@@ -502,6 +523,27 @@ def histogram(
                 p = utils._fill_between(
                     p, e0, f0, x2, y2, legend_label=g["__label"].iloc[0], **fill_kwargs
                 )
+
+    # Put in the rug plot
+    if rug:
+        if rug_kwargs is None:
+            rug_kwargs = dict(alpha=0.5, line_width=0.5)
+        elif type(rug_kwargs) != dict:
+            raise RuntimeError("`rug_kwargs` must be a dictionary.")
+        if "alpha" not in rug_kwargs and "line_alpha" not in rug_kwargs:
+            rug_kwargs["alpha"] = 0.5
+        if "line_width" not in rug_kwargs:
+            rug_kwargs["line_width"] = 0.5
+
+        y = [0, max_height * rug_height]
+
+        for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
+            xs = [[q_val, q_val] for q_val in g[q].values]
+            ys = [y] * len(g)
+            if "color" not in rug_kwargs and "line_color" not in rug_kwargs:
+                p.multi_line(xs, ys, color=palette[i % len(palette)], **rug_kwargs)
+            else:
+                p.multi_line(xs, ys, **rug_kwargs)
 
     if show_legend:
         if q_axis == "y":
@@ -819,7 +861,10 @@ def _compute_histogram(data, bins, density):
         bins = int(np.ceil(np.sqrt(len(data))))
     elif type(bins) == str and bins == "freedman-diaconis":
         h = 2 * (np.percentile(data, 75) - np.percentile(data, 25)) / np.cbrt(len(data))
-        bins = int(np.ceil((data.max() - data.min()) / h))
+        if h == 0.0:
+            bins = 3
+        else:
+            bins = int(np.ceil((data.max() - data.min()) / h))
 
     f, e = np.histogram(data, bins=bins, density=density)
     e0 = np.empty(2 * len(e))
