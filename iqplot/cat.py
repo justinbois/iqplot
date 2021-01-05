@@ -1,3 +1,4 @@
+import copy
 import warnings
 
 import numpy as np
@@ -106,6 +107,10 @@ def strip(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
+    # Protect against mutability of dicts
+    jitter_kwargs = copy.copy(jitter_kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if palette is None:
@@ -323,6 +328,12 @@ def box(
     between the ends of the whiskers are considered outliers and are
     plotted as individual points.
     """
+    # Protect against mutability of dicts
+    box_kwargs = copy.copy(box_kwargs)
+    median_kwargs = copy.copy(median_kwargs)
+    whisker_kwargs = copy.copy(whisker_kwargs)
+    outlier_kwargs = copy.copy(outlier_kwargs)
+
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
 
     if display_outliers is not None:
@@ -649,6 +660,14 @@ def stripbox(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip plot.
     """
+    # Protect against mutability of dicts
+    box_kwargs = copy.copy(box_kwargs)
+    median_kwargs = copy.copy(median_kwargs)
+    whisker_kwargs = copy.copy(whisker_kwargs)
+    jitter_kwargs = copy.copy(jitter_kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+    parcoord_kwargs = copy.copy(parcoord_kwargs)
+
     # Set defaults
     if box_kwargs is None:
         box_kwargs = dict(line_color="gray", fill_alpha=0)
@@ -845,9 +864,8 @@ def _parcoord_source(data, q, cats, q_axis, parcoord_column, factors):
             else:
                 xy.append([r[cats[0]], r[q]])
 
-        if xy != []:
-            if tuple_factors:
-                xy.sort(key=lambda a: factors.index(a[0]))
+        if len(xy) > 1:
+            xy.sort(key=lambda a: factors.index(a[0]))
             xs_pc = []
             ys_pc = []
             for pair in xy:

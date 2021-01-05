@@ -126,6 +126,11 @@ def ecdf(
     output : bokeh.plotting.Figure instance
         Plot populated with ECDFs.
     """
+    # Protect against mutability of dicts
+    marker_kwargs = copy.copy(marker_kwargs)
+    line_kwargs = copy.copy(line_kwargs)
+    conf_int_kwargs = copy.copy(conf_int_kwargs)
+
     q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
     if style == "formal" and complementary:
@@ -407,6 +412,11 @@ def histogram(
     output : Bokeh figure
         Figure populated with histograms.
     """
+    # Protect against mutability of dicts
+    line_kwargs = copy.copy(line_kwargs)
+    fill_kwargs = copy.copy(fill_kwargs)
+    rug_kwargs = copy.copy(rug_kwargs)
+
     if type(bins) == str and bins in ["integer", "exact"]:
         rug = False
 
