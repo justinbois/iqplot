@@ -1,6 +1,7 @@
 """Visualization of how data are distributed, split or colored by a
 categorical variable."""
 
+import copy
 import warnings
 
 import numpy as np
