@@ -910,7 +910,15 @@ def _box_and_whisker(data, min_data):
             }
         )
     else:
-        return None
+        return pd.Series(
+            {
+                "middle": np.nan,
+                "bottom": np.nan,
+                "top": np.nan,
+                "top_whisker": np.nan,
+                "bottom_whisker": np.nan,
+            }
+        )
 
 
 def _box_source(df, cats, q, cols, min_data):
@@ -930,13 +938,23 @@ def _box_source(df, cats, q, cols, min_data):
 
     # Data frame for boxes and whiskers
     df_box = grouped[q].apply(_box_and_whisker, min_data).unstack().reset_index()
+    df_box = df_box.dropna()
+
     source_box = _cat_source(
         df_box, cats, ["middle", "bottom", "top", "top_whisker", "bottom_whisker"], None
     )
 
     # Data frame for outliers
-    df_outliers = grouped[q].apply(_outliers, min_data).reset_index(level=level)
+    df_outliers = grouped[q].apply(_outliers, min_data)
+
+    # If no cat has enough data, just use everything as an "outlier"
+    if type(df_outliers) == pd.core.series.Series:
+        df_outliers = df_source.copy()
+    else:
+        df_outliers = df_outliers.reset_index()
+
     df_outliers[cols] = df_source.loc[df_outliers.index, cols]
+
     source_outliers = _cat_source(df_outliers, cats, cols, None)
 
     return source_box, source_outliers
