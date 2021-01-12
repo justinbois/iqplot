@@ -221,8 +221,6 @@ def strip(
 
     marker_fun(source=source, x=x, y=y, **marker_kwargs)
 
-    print(source.data, x, y)
-
     return p
 
 
