@@ -56,7 +56,7 @@ def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
     return q
 
 
-def _data_cats(data, q, cats, show_legend):
+def _data_cats(data, q, cats, show_legend, legend_label):
     if type(data) == xarray.core.dataarray.DataArray:
         if q is None:
             if data.name is None:
@@ -73,9 +73,12 @@ def _data_cats(data, q, cats, show_legend):
 
     if cats is None:
         data = data.copy()
-        data["__dummy_cat"] = " "
+        if legend_label is None:
+            data["__dummy_cat"] = " "
+            show_legend = False
+        else:
+            data["__dummy_cat"] = legend_label
         cats = "__dummy_cat"
-        show_legend = False
 
     return data, q, cats, show_legend
 

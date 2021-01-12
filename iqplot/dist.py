@@ -24,6 +24,7 @@ def ecdf(
     order=None,
     p=None,
     show_legend=True,
+    legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
     tooltips=None,
@@ -74,8 +75,21 @@ def ecdf(
         figure `p`.
     show_legend : bool, default False
         If True, display legend.
+    legend_label : str, default None
+        If `cats` is None and `show_legend` is True, then if
+        `legend_label` is not None, a legend is created for the glyph
+        on the plot and labeled with `legend_label`. Otherwise, no
+        legend is created if `cats` is None.
     legend_location : str, default 'right'
-        Location of legend.
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
@@ -144,7 +158,9 @@ def ecdf(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
-    data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend)
+    data, q, cats, show_legend = utils._data_cats(
+        data, q, cats, show_legend, legend_label
+    )
 
     cats, cols = utils._check_cat_input(
         data, cats, q, None, None, tooltips, palette, order, marker_kwargs
@@ -350,6 +366,7 @@ def histogram(
     rug=True,
     rug_height=0.05,
     show_legend=None,
+    legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
     bins="freedman-diaconis",
@@ -393,8 +410,21 @@ def histogram(
     p : bokeh.plotting.Figure instance, or None (default)
         If None, create a new figure. Otherwise, populate the existing
         figure `p`.
-    show_legend : bool, default False
-        If True, display legend.
+    legend_label : str, default None
+        If `cats` is None and `show_legend` is True, then if
+        `legend_label` is not None, a legend is created for the glyph
+        on the plot and labeled with `legend_label`. Otherwise, no
+        legend is created if `cats` is None.
+    legend_location : str, default 'right'
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
     bins : int, array_like, or str, default 'freedman-diaconis'
         If int or array_like, setting for `bins` kwarg to be passed to
         `np.histogram()`. If 'exact', then each unique value in the
@@ -454,7 +484,9 @@ def histogram(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
-    df, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend)
+    df, q, cats, show_legend = utils._data_cats(
+        data, q, cats, show_legend, legend_label
+    )
 
     if show_legend is None:
         if cats is None:
@@ -889,6 +921,8 @@ def _dist_legend(
     lines,
     patches,
 ):
+    """Add a legend to a histogram or ECDF plot.
+    """
     if show_legend:
         if len(markers) > 0:
             if len(lines) > 0:
@@ -923,35 +957,46 @@ def _dist_legend(
             else:
                 items = [(label, [line]) for label, line in zip(labels, lines)]
 
-        if legend_location in ["right", "left", "above", "below"]:
-            legend = bokeh.models.Legend(
-                items=items, location="center", orientation=legend_orientation
-            )
-            p.add_layout(legend, legend_location)
-        elif (
-            legend_location
-            in [
-                "top_left",
-                "top_center",
-                "top_right",
-                "center_right",
-                "bottom_right",
-                "bottom_center",
-                "bottom_left",
-                "center_left",
-                "center",
-            ]
-            or type(legend_location) == tuple
-        ):
-            legend = bokeh.models.Legend(
-                items=items, location=legend_location, orientation=legend_orientation
-            )
-            p.add_layout(legend, "center")
+        if len(p.legend) == 1:
+            for item in items:
+                p.legend.items.append(
+                    bokeh.models.LegendItem(label=item[0], renderers=item[1])
+                )
         else:
-            raise RuntimeError(
-                'Invalid `legend_location`. Must be a 2-tuple specifying location or one of ["right", "left", "above", "below", "top_left", "top_center", "top_right", "center_right", "bottom_right", "bottom_center", "bottom_left", "center_left", "center"]'
-            )
-
+            if len(p.legend) > 1:
+                warnings.warn(
+                    "Ambiguous which legend to add glyphs to. Creating new legend."
+                )
+            if legend_location in ["right", "left", "above", "below"]:
+                legend = bokeh.models.Legend(
+                    items=items, location="center", orientation=legend_orientation
+                )
+                p.add_layout(legend, legend_location)
+            elif (
+                legend_location
+                in [
+                    "top_left",
+                    "top_center",
+                    "top_right",
+                    "center_right",
+                    "bottom_right",
+                    "bottom_center",
+                    "bottom_left",
+                    "center_left",
+                    "center",
+                ]
+                or type(legend_location) == tuple
+            ):
+                legend = bokeh.models.Legend(
+                    items=items,
+                    location=legend_location,
+                    orientation=legend_orientation,
+                )
+                p.add_layout(legend, "center")
+            else:
+                raise RuntimeError(
+                    'Invalid `legend_location`. Must be a 2-tuple specifying location or one of ["right", "left", "above", "below", "top_left", "top_center", "top_right", "center_right", "bottom_right", "bottom_center", "bottom_left", "center_left", "center"]'
+                )
 
         p.legend.click_policy = click_policy
 

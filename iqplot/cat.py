@@ -116,7 +116,7 @@ def strip(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
-    data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend)
+    data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend, None)
 
     cats, cols = utils._check_cat_input(
         data, cats, q, color_column, parcoord_column, tooltips, palette, order, kwargs
@@ -220,6 +220,8 @@ def strip(
         )
 
     marker_fun(source=source, x=x, y=y, **marker_kwargs)
+
+    print(source.data, x, y)
 
     return p
 
@@ -346,7 +348,7 @@ def box(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
-    data, q, cats, _ = utils._data_cats(data, q, cats, False)
+    data, q, cats, _ = utils._data_cats(data, q, cats, False, None)
 
     cats, cols = utils._check_cat_input(
         data, cats, q, None, None, None, palette, order, box_kwargs
