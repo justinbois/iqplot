@@ -24,6 +24,8 @@ def ecdf(
     order=None,
     p=None,
     show_legend=True,
+    legend_location="right",
+    legend_orientation="vertical",
     tooltips=None,
     complementary=False,
     kind="collection",
@@ -72,6 +74,8 @@ def ecdf(
         figure `p`.
     show_legend : bool, default False
         If True, display legend.
+    legend_location : str, default 'right'
+        Location of legend.
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
@@ -235,13 +239,20 @@ def ecdf(
         else:
             p.add_tools(bokeh.models.HoverTool(tooltips=tooltips))
 
+    markers = []
+    lines = []
+    patches = []
+    labels = []
+
     if kind == "collection":
-        # Explicitly loop to enable click policies on the legend (not possible with factors)
+        # Explicitly loop to enable click policies on the legend
+        # (not possible with factors)
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
+            labels.append(g["__label"].iloc[0])
             if conf_int:
                 conf_int_kwargs["fill_color"] = palette[i % len(palette)]
-                conf_int_kwargs["legend_label"] = g["__label"].iloc[0]
-                p = _ecdf_conf_int(
+                # conf_int_kwargs["legend_label"] = g["__label"].iloc[0]
+                p, patch = _ecdf_conf_int(
                     p,
                     g[q],
                     complementary=complementary,
@@ -250,26 +261,28 @@ def ecdf(
                     ptiles=ptiles,
                     **conf_int_kwargs,
                 )
+                patches.append(patch)
 
             marker_kwargs["color"] = palette[i % len(palette)]
-            marker_kwargs["legend_label"] = g["__label"].iloc[0]
+            # marker_kwargs["legend_label"] = g["__label"].iloc[0]
             line_kwargs["color"] = palette[i % len(palette)]
-            line_kwargs["legend_label"] = g["__label"].iloc[0]
+            # line_kwargs["legend_label"] = g["__label"].iloc[0]
             if style == "staircase":
-                p = _staircase_ecdf(
+                p, new_line = _staircase_ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
                     q_axis=q_axis,
                     line_kwargs=line_kwargs,
                 )
+                lines.append(new_line)
             elif style == "dots":
                 if q_axis == "y":
-                    marker_fun(source=g, x=y, y=q, **marker_kwargs)
+                    markers.append(marker_fun(source=g, x=y, y=q, **marker_kwargs))
                 else:
-                    marker_fun(source=g, x=q, y=y, **marker_kwargs)
+                    markers.append(marker_fun(source=g, x=q, y=y, **marker_kwargs))
             elif style == "formal":
-                p = _formal_ecdf(
+                p, circle, segment = _formal_ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
@@ -277,6 +290,8 @@ def ecdf(
                     marker_kwargs=marker_kwargs,
                     line_kwargs=line_kwargs,
                 )
+                markers.append(circle)
+                lines.append(segment)
     elif kind == "colored":
         if style in ["formal", "staircase"]:
             raise RuntimeError(
@@ -287,7 +302,7 @@ def ecdf(
             if "fill_color" not in conf_int_kwargs:
                 conf_int_kwargs["fill_color"] = "gray"
 
-            p = _ecdf_conf_int(
+            p, patch = _ecdf_conf_int(
                 p,
                 df[q],
                 complementary=complementary,
@@ -303,14 +318,25 @@ def ecdf(
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
             source = bokeh.models.ColumnDataSource(g[cols])
             mkwargs = marker_kwargs
-            mkwargs["legend_label"] = g["__label"].iloc[0]
+            # mkwargs["legend_label"] = g["__label"].iloc[0]
             mkwargs["color"] = palette[i % len(palette)]
+            labels.append(g["__label"].iloc[0])
             if q_axis == "y":
-                marker_fun(source=source, x=y, y=q, **mkwargs)
+                markers.append(marker_fun(source=source, x=y, y=q, **mkwargs))
             else:
-                marker_fun(source=source, x=q, y=y, **mkwargs)
+                markers.append(marker_fun(source=source, x=q, y=y, **mkwargs))
 
-    return _ecdf_legend(p, complementary, q_axis, click_policy, show_legend)
+    return _dist_legend(
+        p,
+        show_legend,
+        legend_location,
+        legend_orientation,
+        click_policy,
+        labels,
+        markers,
+        lines,
+        patches,
+    )
 
 
 def histogram(
@@ -324,6 +350,8 @@ def histogram(
     rug=True,
     rug_height=0.05,
     show_legend=None,
+    legend_location="right",
+    legend_orientation="vertical",
     bins="freedman-diaconis",
     density=False,
     kind="step_filled",
@@ -510,6 +538,9 @@ def histogram(
 
     # Explicitly loop to enable click policies on the legend (not possible with factors)
     max_height = 0
+    lines = []
+    labels = []
+    patches = []
     for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
         e0, f0 = _compute_histogram(g[q], bins, density)
 
@@ -518,22 +549,20 @@ def histogram(
         line_kwargs["color"] = palette[i % len(palette)]
 
         if q_axis == "y":
-            p.line(f0, e0, **line_kwargs, legend_label=g["__label"].iloc[0])
+            lines.append(p.line(f0, e0, **line_kwargs))
         else:
-            p.line(e0, f0, **line_kwargs, legend_label=g["__label"].iloc[0])
+            lines.append(p.line(e0, f0, **line_kwargs))
+        labels.append(g["__label"].iloc[0])
 
         if kind == "step_filled":
             x2 = [e0.min(), e0.max()]
             y2 = [0, 0]
             fill_kwargs["color"] = palette[i % len(palette)]
             if q_axis == "y":
-                p = utils._fill_between(
-                    p, f0, e0, y2, x2, legend_label=g["__label"].iloc[0], **fill_kwargs
-                )
+                p, patch = utils._fill_between(p, f0, e0, y2, x2, **fill_kwargs)
             else:
-                p = utils._fill_between(
-                    p, e0, f0, x2, y2, legend_label=g["__label"].iloc[0], **fill_kwargs
-                )
+                p, patch = utils._fill_between(p, e0, f0, x2, y2, **fill_kwargs)
+            patches.append(patch)
 
     # Put in the rug plot
     if rug:
@@ -556,16 +585,17 @@ def histogram(
             else:
                 p.multi_line(xs, ys, **rug_kwargs)
 
-    if show_legend:
-        if q_axis == "y":
-            p.legend.location = "bottom_right"
-        else:
-            p.legend.location = "top_right"
-        p.legend.click_policy = click_policy
-    else:
-        p.legend.visible = False
-
-    return p
+    return _dist_legend(
+        p,
+        show_legend,
+        legend_location,
+        legend_orientation,
+        click_policy,
+        labels,
+        [],
+        lines,
+        patches,
+    )
 
 
 def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
@@ -600,9 +630,9 @@ def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
 
     # Line of steps
     if q_axis == "y":
-        p.line(y, x, **line_kwargs)
+        line = p.line(y, x, **line_kwargs)
     elif q_axis == "x":
-        p.line(x, y, **line_kwargs)
+        line = p.line(x, y, **line_kwargs)
 
     # Rays for ends
     if q_axis == "y":
@@ -620,7 +650,7 @@ def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
             p.ray(x[0], 0, None, np.pi, **line_kwargs)
             p.ray(x[-1], 1, None, 0, **line_kwargs)
 
-    return p
+    return p, line
 
 
 def _formal_ecdf(
@@ -660,21 +690,21 @@ def _formal_ecdf(
     unfilled_kwargs["fill_color"] = "white"
 
     if q_axis == "y":
-        p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
+        segment = p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
         p.ray(0, x[0], angle=-np.pi / 2, length=0, **line_kwargs)
         p.ray(1, x[-1], angle=np.pi / 2, length=0, **line_kwargs)
-        p.circle(y, x, **marker_kwargs)
+        circle = p.circle(y, x, **marker_kwargs)
         p.circle([0], [0], **unfilled_kwargs)
         p.circle(y[:-1], x[1:], **unfilled_kwargs)
     elif q_axis == "x":
-        p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
+        segment = p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
         p.ray(x[0], 0, angle=np.pi, length=0, **line_kwargs)
         p.ray(x[-1], 1, angle=0, length=0, **line_kwargs)
-        p.circle(x, y, **marker_kwargs)
+        circle = p.circle(x, y, **marker_kwargs)
         p.circle([0], [0], **unfilled_kwargs)
         p.circle(x[1:], y[:-1], **unfilled_kwargs)
 
-    return p
+    return p, circle, segment
 
 
 def _ecdf_vals(data, staircase=False, complementary=False):
@@ -799,26 +829,26 @@ def _ecdf_conf_int(
 
     if q_axis == "y":
         if complementary:
-            p = utils._fill_between(
+            p, patch = utils._fill_between(
                 p, x1=1 - y_plot, y1=x_low, x2=1 - y_plot, y2=x_high, **kwargs
             )
         else:
-            p = utils._fill_between(
+            p, patch = utils._fill_between(
                 p, x1=y_plot, y1=x_low, x2=y_plot, y2=x_high, **kwargs
             )
     elif q_axis == "x":
         if complementary:
-            p = utils._fill_between(
+            p, patch = utils._fill_between(
                 p, x1=x_low, y1=1 - y_plot, x2=x_high, y2=1 - y_plot, **kwargs
             )
         else:
-            p = utils._fill_between(
+            p, patch = utils._fill_between(
                 p, x1=x_low, y1=y_plot, x2=x_high, y2=y_plot, **kwargs
             )
     else:
         raise RuntimeError("`q_axis` must be either 'x' or 'y'.")
 
-    return p
+    return p, patch
 
 
 def _ecdf_y(data, complementary=False):
@@ -848,21 +878,82 @@ def _ecdf_y(data, complementary=False):
         return data.rank(method="first") / len(data)
 
 
-def _ecdf_legend(p, complementary, q_axis, click_policy, show_legend):
+def _dist_legend(
+    p,
+    show_legend,
+    legend_location,
+    legend_orientation,
+    click_policy,
+    labels,
+    markers,
+    lines,
+    patches,
+):
     if show_legend:
-        if q_axis == "y":
-            if complementary:
-                p.legend.location = "bottom_left"
+        if len(markers) > 0:
+            if len(lines) > 0:
+                if len(patches) > 0:
+                    items = [
+                        (label, [marker, line, patch])
+                        for label, marker, line, patch in zip(
+                            labels, markers, lines, patches
+                        )
+                    ]
+                else:
+                    items = [
+                        (label, [marker, line])
+                        for label, marker, line in zip(labels, lines, markers)
+                    ]
             else:
-                p.legend.location = "top_left"
-        elif q_axis == "x":
-            if complementary:
-                p.legend.location = "top_right"
+                if len(patches) > 0:
+                    items = [
+                        (label, [marker, patch])
+                        for label, marker, patch in zip(labels, markers, patches)
+                    ]
+                else:
+                    items = [
+                        (label, [marker]) for label, marker in zip(labels, markers)
+                    ]
+        else:
+            if len(patches) > 0:
+                items = [
+                    (label, [line, patch])
+                    for label, line, patch in zip(labels, lines, patches)
+                ]
             else:
-                p.legend.location = "bottom_right"
+                items = [(label, [line]) for label, line in zip(labels, lines)]
+
+        if legend_location in ["right", "left", "above", "below"]:
+            legend = bokeh.models.Legend(
+                items=items, location="center", orientation=legend_orientation
+            )
+            p.add_layout(legend, legend_location)
+        elif (
+            legend_location
+            in [
+                "top_left",
+                "top_center",
+                "top_right",
+                "center_right",
+                "bottom_right",
+                "bottom_center",
+                "bottom_left",
+                "center_left",
+                "center",
+            ]
+            or type(legend_location) == tuple
+        ):
+            legend = bokeh.models.Legend(
+                items=items, location=legend_location, orientation=legend_orientation
+            )
+            p.add_layout(legend, "center")
+        else:
+            raise RuntimeError(
+                'Invalid `legend_location`. Must be a 2-tuple specifying location or one of ["right", "left", "above", "below", "top_left", "top_center", "top_right", "center_right", "bottom_right", "bottom_center", "bottom_left", "center_left", "center"]'
+            )
+
+
         p.legend.click_policy = click_policy
-    else:
-        p.legend.visible = False
 
     return p
 

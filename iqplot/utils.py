@@ -20,6 +20,9 @@ def _fig_dimensions(kwargs):
     ):
         kwargs["frame_height"] = 275
 
+    if "toolbar_location" not in kwargs:
+        kwargs["toolbar_location"] = "above"
+
     return kwargs
 
 
@@ -101,11 +104,11 @@ def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
         Plot populated with fill-between.
 
     """
-    p.patch(
+    patch = p.patch(
         x=np.concatenate((x1, x2[::-1])), y=np.concatenate((y1, y2[::-1])), **kwargs
     )
 
-    return p
+    return p, patch
 
 
 def _get_marker(p, marker):
