@@ -669,18 +669,18 @@ def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
     # Rays for ends
     if q_axis == "y":
         if complementary:
-            p.ray(1, x[0], None, -np.pi / 2, **line_kwargs)
-            p.ray(0, x[-1], None, np.pi / 2, **line_kwargs)
+            p.ray(x=1, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
+            p.ray(x=0, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
         else:
-            p.ray(0, x[0], None, -np.pi / 2, **line_kwargs)
-            p.ray(1, x[-1], None, np.pi / 2, **line_kwargs)
+            p.ray(x=0, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
+            p.ray(x=1, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
     elif q_axis == "x":
         if complementary:
-            p.ray(x[0], 1, None, np.pi, **line_kwargs)
-            p.ray(x[-1], 0, None, 0, **line_kwargs)
+            p.ray(x=x[0], y=1, length=0, angle=np.pi, **line_kwargs)
+            p.ray(x=x[-1], y=0, length=0, angle=0, **line_kwargs)
         else:
-            p.ray(x[0], 0, None, np.pi, **line_kwargs)
-            p.ray(x[-1], 1, None, 0, **line_kwargs)
+            p.ray(x=x[0], y=0, length=0, angle=np.pi, **line_kwargs)
+            p.ray(x=x[-1], y=1, length=0, angle=0, **line_kwargs)
 
     return p, line
 
@@ -723,15 +723,15 @@ def _formal_ecdf(
 
     if q_axis == "y":
         segment = p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
-        p.ray(0, x[0], angle=-np.pi / 2, length=0, **line_kwargs)
-        p.ray(1, x[-1], angle=np.pi / 2, length=0, **line_kwargs)
+        p.ray(x=0, y=x[0], angle=-np.pi / 2, length=0, **line_kwargs)
+        p.ray(x=1, y=x[-1], angle=np.pi / 2, length=0, **line_kwargs)
         circle = p.circle(y, x, **marker_kwargs)
         p.circle([0], [0], **unfilled_kwargs)
         p.circle(y[:-1], x[1:], **unfilled_kwargs)
     elif q_axis == "x":
         segment = p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
-        p.ray(x[0], 0, angle=np.pi, length=0, **line_kwargs)
-        p.ray(x[-1], 1, angle=0, length=0, **line_kwargs)
+        p.ray(x=x[0], y=0, angle=np.pi, length=0, **line_kwargs)
+        p.ray(x=x[-1], y=1, angle=0, length=0, **line_kwargs)
         circle = p.circle(x, y, **marker_kwargs)
         p.circle([0], [0], **unfilled_kwargs)
         p.circle(x[1:], y[:-1], **unfilled_kwargs)
