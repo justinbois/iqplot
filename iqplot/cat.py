@@ -926,11 +926,6 @@ def _box_source(df, cats, q, cols, min_data):
     # Need to reset index for use in slicing outliers
     df_source = df.reset_index(drop=True)
 
-    # if type(cats) in [list, tuple]:
-    #     level = list(range(len(cats)))
-    # else:
-    #     level = 0
-
     if cats is None:
         grouped = df_source
     else:
