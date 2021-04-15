@@ -926,10 +926,10 @@ def _box_source(df, cats, q, cols, min_data):
     # Need to reset index for use in slicing outliers
     df_source = df.reset_index(drop=True)
 
-    if type(cats) in [list, tuple]:
-        level = list(range(len(cats)))
-    else:
-        level = 0
+    # if type(cats) in [list, tuple]:
+    #     level = list(range(len(cats)))
+    # else:
+    #     level = 0
 
     if cats is None:
         grouped = df_source
@@ -945,15 +945,18 @@ def _box_source(df, cats, q, cols, min_data):
     )
 
     # Data frame for outliers
-    df_outliers = grouped[q].apply(_outliers, min_data)
+    s_outliers = grouped[q].apply(_outliers, min_data)
 
     # If no cat has enough data, just use everything as an "outlier"
-    if type(df_outliers) == pd.core.series.Series:
+    if len(s_outliers) == len(df_source):
         df_outliers = df_source.copy()
+        inds = df_source.index
     else:
-        df_outliers = df_outliers.reset_index()
+        df_outliers = s_outliers.reset_index()
+        inds = s_outliers.index.get_level_values(-1)
 
-    df_outliers[cols] = df_source.loc[df_outliers.index, cols]
+    df_outliers.index = inds
+    df_outliers[cols] = df_source.loc[inds, cols]
 
     source_outliers = _cat_source(df_outliers, cats, cols, None)
 
