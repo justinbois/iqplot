@@ -291,10 +291,10 @@ def _convert_data(data, inf_ok=False, min_len=1):
     """
     # If it's scalar, convert to array
     if np.isscalar(data):
-        data = np.array([data], dtype=np.float)
+        data = np.array([data], dtype=np.float64)
 
     # Convert data to NumPy array
-    data = np.array(data, dtype=np.float)
+    data = np.array(data, dtype=np.float64)
 
     # Make sure it is 1D
     if len(data.shape) != 1:
