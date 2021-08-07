@@ -380,7 +380,7 @@ def box(
     elif type(median_kwargs) != dict:
         raise RuntimeError("`median_kwargs` must be a dict.")
     elif "line_color" not in median_kwargs:
-        median_kwargs["line_color"] = white
+        median_kwargs["line_color"] = "white"
 
     if q_axis == "x":
         if "height" in box_kwargs:
