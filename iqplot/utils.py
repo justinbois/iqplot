@@ -206,8 +206,8 @@ def _check_cat_input(
     if q is None:
         raise RuntimeError("`q` argument must be provided.")
 
-    if type(palette) not in [list, tuple]:
-        raise RuntimeError("`palette` must be a list or tuple.")
+    if type(palette) not in [list, tuple, str]:
+        raise RuntimeError("`palette` must be a list, tuple or string.")
 
     if q not in df.columns:
         raise RuntimeError(f"{q} is not a column in the inputted data frame")
