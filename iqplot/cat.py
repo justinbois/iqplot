@@ -673,8 +673,10 @@ def stripbox(
         box_kwargs = dict(line_color="gray", fill_alpha=0)
     if "color" not in box_kwargs and "line_color" not in box_kwargs:
         box_kwargs["line_color"] = "gray"
-    if "fill_alpha" not in box_kwargs:
+    if ("fill_alpha" not in box_kwargs) and ("fill_color" not in box_kwargs):
         box_kwargs["fill_alpha"] = 0
+    elif ("fill_color" in box_kwargs) and ("fill_alpha" not in box_kwargs):
+        box_kwargs["fill_alpha"] = 0.5
 
     if median_kwargs is None:
         median_kwargs = dict(line_color="gray")
