@@ -60,9 +60,9 @@ def ecdf(
         Name of column(s) to use as categorical variable(s).
     q_axis : str, either 'x' or 'y', default 'x'
         Axis along which the quantitative value varies.
-    palette : list of strings of hex colors, or single hex string
+    palette : list colors, or single color string 
         If a list, color palette to use. If a single string representing
-        a hex color, all glyphs are colored with that color. Default is
+        a color, all glyphs are colored with that color. Default is
         colorcet.b_glasbey_category10 from the colorcet package.
     order : list or None
         If not None, must be a list of unique group names when the input
@@ -157,6 +157,8 @@ def ecdf(
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
+    elif type(palette) == str:
+        palette = [palette]
 
     data, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
@@ -397,9 +399,9 @@ def histogram(
         Name of column(s) to use as categorical variable(s).
     q_axis : str, either 'x' or 'y', default 'x'
         Axis along which the quantitative value varies.
-    palette : list of strings of hex colors, or single hex string
+    palette : list colors, or single color string 
         If a list, color palette to use. If a single string representing
-        a hex color, all glyphs are colored with that color. Default is
+        a color, all glyphs are colored with that color. Default is
         colorcet.b_glasbey_category10 from the colorcet package.
     order : list or None
         If not None, must be a list of unique group names when the input
@@ -483,6 +485,8 @@ def histogram(
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
+    elif type(palette) == str:
+        palette = [palette]
 
     df, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
