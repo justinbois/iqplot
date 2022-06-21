@@ -259,6 +259,10 @@ def ecdf(
 
     markers = []
     lines = []
+    circles_high = []
+    circles_low = []
+    rays_high = []
+    rays_low = []
     patches = []
     labels = []
 
@@ -286,7 +290,7 @@ def ecdf(
             line_kwargs["color"] = palette[i % len(palette)]
             # line_kwargs["legend_label"] = g["__label"].iloc[0]
             if style == "staircase":
-                p, new_line = _staircase_ecdf(
+                p, new_line, new_ray_high, new_ray_low = _staircase_ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
@@ -294,13 +298,15 @@ def ecdf(
                     line_kwargs=line_kwargs,
                 )
                 lines.append(new_line)
+                rays_high.append(new_ray_high)
+                rays_low.append(new_ray_low)
             elif style == "dots":
                 if q_axis == "y":
                     markers.append(marker_fun(source=g, x=y, y=q, **marker_kwargs))
                 else:
                     markers.append(marker_fun(source=g, x=q, y=y, **marker_kwargs))
             elif style == "formal":
-                p, circle, segment = _formal_ecdf(
+                p, circle, segment, new_ray_high, new_ray_low, new_circle_high, new_circle_low = _formal_ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
@@ -310,6 +316,10 @@ def ecdf(
                 )
                 markers.append(circle)
                 lines.append(segment)
+                rays_high.append(new_ray_high)
+                rays_low.append(new_ray_low)
+                circles_high.append(new_circle_high)
+                circles_low.append(new_circle_low)
     elif kind == "colored":
         if style in ["formal", "staircase"]:
             raise RuntimeError(
@@ -354,6 +364,10 @@ def ecdf(
         markers,
         lines,
         patches,
+        rays_high,
+        rays_low,
+        circles_high,
+        circles_low,
     )
 
 
@@ -631,6 +645,10 @@ def histogram(
         [],
         lines,
         patches,
+        [],
+        [],
+        [],
+        [],
     )
 
 
@@ -655,8 +673,14 @@ def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
 
     Returns
     -------
-    output : bokeh.plotting.Figure instance
+    p : bokeh.plotting.Figure instance
         Plot populated with ECDF.
+    line : bokeh.models.glyph.LineGlyph.Line instance
+        Line of staircase, used for constructing clickable legend
+    ray_high : bokeh.models.glyph.LineGlyph.Ray instance
+        Ray for top of ECDF, used for constructing clickable legend.
+    ray_low : bokeh.models.glyph.LineGlyph.Ray instance
+        Ray for bottom of ECDF, used for constructing clickable legend.
     """
     # Extract data
     data = utils._convert_data(data)
@@ -673,20 +697,20 @@ def _staircase_ecdf(p, data, complementary=False, q_axis="x", line_kwargs={}):
     # Rays for ends
     if q_axis == "y":
         if complementary:
-            p.ray(x=1, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
-            p.ray(x=0, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
+            ray_high = p.ray(x=1, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
+            ray_low = p.ray(x=0, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
         else:
-            p.ray(x=0, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
-            p.ray(x=1, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
+            ray_low = p.ray(x=0, y=x[0], length=0, angle=-np.pi / 2, **line_kwargs)
+            ray_high = p.ray(x=1, y=x[-1], length=0, angle=np.pi / 2, **line_kwargs)
     elif q_axis == "x":
         if complementary:
-            p.ray(x=x[0], y=1, length=0, angle=np.pi, **line_kwargs)
-            p.ray(x=x[-1], y=0, length=0, angle=0, **line_kwargs)
+            ray_high = p.ray(x=x[0], y=1, length=0, angle=np.pi, **line_kwargs)
+            ray_low = p.ray(x=x[-1], y=0, length=0, angle=0, **line_kwargs)
         else:
-            p.ray(x=x[0], y=0, length=0, angle=np.pi, **line_kwargs)
-            p.ray(x=x[-1], y=1, length=0, angle=0, **line_kwargs)
+            ray_low = p.ray(x=x[0], y=0, length=0, angle=np.pi, **line_kwargs)
+            ray_high = p.ray(x=x[-1], y=1, length=0, angle=0, **line_kwargs)
 
-    return p, line
+    return p, line, ray_high, ray_low
 
 
 def _formal_ecdf(
@@ -712,8 +736,20 @@ def _formal_ecdf(
 
     Returns
     -------
-    output : bokeh.plotting.Figure instance
+    p : bokeh.plotting.Figure instance
         Plot populated with ECDF.
+    segment : bokeh.models.glyph.LineGlyph.Segment instance
+        Line of staircase, used for constructing clickable legend
+    ray_high : bokeh.models.glyph.LineGlyph.Ray instance
+        Ray for top of ECDF, used for constructing clickable legend.
+    ray_low : bokeh.models.glyph.LineGlyph.Ray instance
+        Ray for bottom of ECDF, used for constructing clickable legend.
+    circle_high : bokeh.models.glyph.LineGlyph.Ray instance
+        Open circle for top of ECDF, used for constructing clickable 
+        legend.
+    circle_low : bokeh.models.glyph.LineGlyph.Ray instance
+        Open circle for bottom of ECDF, used for constructing clickable
+        legend.    
     """
     # Extract data
     data = utils._convert_data(data)
@@ -727,20 +763,20 @@ def _formal_ecdf(
 
     if q_axis == "y":
         segment = p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
-        p.ray(x=0, y=x[0], angle=-np.pi / 2, length=0, **line_kwargs)
-        p.ray(x=1, y=x[-1], angle=np.pi / 2, length=0, **line_kwargs)
+        ray_low = p.ray(x=0, y=x[0], angle=-np.pi / 2, length=0, **line_kwargs)
+        ray_high = p.ray(x=1, y=x[-1], angle=np.pi / 2, length=0, **line_kwargs)
         circle = p.circle(y, x, **marker_kwargs)
-        p.circle([0], [0], **unfilled_kwargs)
-        p.circle(y[:-1], x[1:], **unfilled_kwargs)
+        circle_low = p.circle([0], [0], **unfilled_kwargs)
+        circle_high = p.circle(y[:-1], x[1:], **unfilled_kwargs)
     elif q_axis == "x":
         segment = p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
-        p.ray(x=x[0], y=0, angle=np.pi, length=0, **line_kwargs)
-        p.ray(x=x[-1], y=1, angle=0, length=0, **line_kwargs)
+        ray_low = p.ray(x=x[0], y=0, angle=np.pi, length=0, **line_kwargs)
+        ray_high = p.ray(x=x[-1], y=1, angle=0, length=0, **line_kwargs)
         circle = p.circle(x, y, **marker_kwargs)
-        p.circle([0], [0], **unfilled_kwargs)
-        p.circle(x[1:], y[:-1], **unfilled_kwargs)
+        circle_low = p.circle([0], [0], **unfilled_kwargs)
+        circle_high = p.circle(x[1:], y[:-1], **unfilled_kwargs)
 
-    return p, circle, segment
+    return p, circle, segment, ray_high, ray_low, circle_high, circle_low
 
 
 def _ecdf_vals(data, staircase=False, complementary=False):
@@ -924,6 +960,11 @@ def _dist_legend(
     markers,
     lines,
     patches,
+    rays_high,
+    rays_low,
+    circles_high,
+    circles_low,
+
 ):
     """Add a legend to a histogram or ECDF plot.
     """
@@ -932,15 +973,17 @@ def _dist_legend(
             if len(lines) > 0:
                 if len(patches) > 0:
                     items = [
-                        (label, [marker, line, patch])
-                        for label, marker, line, patch in zip(
-                            labels, markers, lines, patches
+                        (label, [marker, line, patch, ray_high, ray_low, circle_high, circle_low])
+                        for label, marker, line, patch, ray_high, ray_low, circle_high, circle_low in zip(
+                            labels, markers, lines, patches, rays_high, rays_low, circles_high, circles_low
                         )
                     ]
                 else:
                     items = [
-                        (label, [marker, line])
-                        for label, marker, line in zip(labels, lines, markers)
+                        (label, [marker, line, ray_high, ray_low, circle_high, circle_low])
+                        for label, marker, line, ray_high, ray_low, circle_high, circle_low in zip(
+                            labels, markers, lines, rays_high, rays_low, circles_high, circles_low
+                        )
                     ]
             else:
                 if len(patches) > 0:
@@ -954,12 +997,21 @@ def _dist_legend(
                     ]
         else:
             if len(patches) > 0:
-                items = [
-                    (label, [line, patch])
-                    for label, line, patch in zip(labels, lines, patches)
-                ]
+                if len(rays_high) > 0:
+                    items = [
+                        (label, [line, patch, ray_high, ray_low])
+                        for label, line, patch, ray_high, ray_low in zip(labels, lines, patches, rays_high, rays_low)
+                    ]
+                else:
+                    items = [
+                        (label, [line, patch])
+                        for label, line, patch in zip(labels, lines, patches)
+                    ]
             else:
-                items = [(label, [line]) for label, line in zip(labels, lines)]
+                if len(rays_high) > 0:
+                    items = [(label, [line, ray_high, ray_low]) for label, line, ray_high, ray_low in zip(labels, lines, rays_high, rays_low)]
+                else:
+                    items = [(label, [line]) for label, line in zip(labels, lines)]
 
         if len(p.legend) == 1:
             for item in items:
