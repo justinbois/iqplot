@@ -159,12 +159,22 @@ def strip(
     elif type(marker_kwargs) != dict:
         raise RuntimeError("`marker_kwargs` must be a dict.")
 
-    if "color" not in marker_kwargs:
+    if (
+        "color" not in marker_kwargs
+        and "fill_color" not in marker_kwargs
+        and "line_color" not in marker_kwargs
+    ):
         if color_column is None:
             color_column = "cat"
-        marker_kwargs["color"] = bokeh.transform.factor_cmap(
-            color_column, palette=palette, factors=color_factors
-        )
+        if color_factors == "hex":
+            marker_kwargs["color"] = color_column
+            if show_legend:
+                warnings.warn('`color_column` consists of hex colors. No legend will be generated.')
+                show_legend = False
+        else:
+            marker_kwargs["color"] = bokeh.transform.factor_cmap(
+                color_column, palette=palette, factors=color_factors
+            )
 
     if marker == "tick":
         marker = "dash"
@@ -604,7 +614,10 @@ def stripbox(
     show_legend : bool, default False
         If True, display legend.
     color_column : hashable, default None
-        Column of `data` to use in determining color of glyphs. If None,
+        Column of `data` to use in determining color of glyphs. The data
+        in the color_column are assumed to be categorical. If the data
+        in color_column consist entirely of hex colors, then those
+        colors are directly used to color the glyphs. If None,
         then `cats` is used.
     parcoord_column : hashable, default None
         Column of `data` to use to construct a parallel coordinate plot.
@@ -795,10 +808,20 @@ def _get_cat_range(df, grouped, order, color_column, q_axis):
 
     if color_column is None:
         color_factors = factors
+    elif _color_column_hexcodes(df, color_column):
+        color_factors = "hex"
     else:
         color_factors = tuple(sorted(list(df[color_column].unique().astype(str))))
 
     return cat_range, factors, color_factors
+
+
+def _color_column_hexcodes(df, color_column):
+    """Return True of the color column consists of all hex codes"""
+    try:
+        return df[color_column].str.match(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$").all()
+    except:
+        return False
 
 
 def _cat_figure(df, grouped, q, order, color_column, q_axis, kwargs):
