@@ -27,20 +27,23 @@ def ecdf(
     legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
+    legend_click_policy="hide",
     tooltips=None,
     complementary=False,
     kind="collection",
     style="dots",
+    arrangement="overlay",
     conf_int=False,
     ptiles=[2.5, 97.5],
     n_bs_reps=10000,
-    click_policy="hide",
     marker="circle",
     marker_kwargs=None,
     line_kwargs=None,
-    conf_int_kwargs=None,
+    fill_kwargs=None,
     horizontal=None,
     val=None,
+    click_policy=None,
+    conf_int_kwargs=None,
     **kwargs,
 ):
     """
@@ -60,7 +63,7 @@ def ecdf(
         Name of column(s) to use as categorical variable(s).
     q_axis : str, either 'x' or 'y', default 'x'
         Axis along which the quantitative value varies.
-    palette : list colors, or single color string 
+    palette : list colors, or single color string
         If a list, color palette to use. If a single string representing
         a color, all glyphs are colored with that color. Default is
         colorcet.b_glasbey_category10 from the colorcet package.
@@ -90,6 +93,9 @@ def ecdf(
         tuple.
     legend_orientation : str, default 'vertical'
         Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
@@ -117,9 +123,6 @@ def ecdf(
     n_bs_reps : int, default 1000
         Number of bootstrap replicates to do to compute confidence
         interval. Ignored if `conf_int` is False.
-    click_policy : str, default 'hide'
-        Either 'hide', 'mute', or None; how the glyphs respond when the
-        corresponding category is clicked in the legend.
     marker : str, default 'circle'
         Name of marker to be used in the plot (ignored if `style` is
         'staircase'). Must be one of['asterisk', 'circle',
@@ -130,12 +133,19 @@ def ecdf(
         Keyword arguments to be passed to `p.circle()`.
     line_kwargs : dict
         Kwargs to be passed to `p.line()`, `p.ray()`, and `p.segment()`.
-    conf_int_kwargs : dict
-        kwargs to pass into patches depicting confidence intervals.
+    fill_kwargs : dict
+        Keyword arguments to pass to `p.patch()` when making the fill
+        for the step-filled histogram or confidence intervals. Ignored
+        if `style = 'step'` and `conf_int` is False. By default
+        {"fill_alpha": 0.3, "line_alpha": 0}.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
+    conf_int_kwargs : dict
+        Deprecated. Use `fill_kwargs`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when making
         the plot.
@@ -148,9 +158,19 @@ def ecdf(
     # Protect against mutability of dicts
     marker_kwargs = copy.copy(marker_kwargs)
     line_kwargs = copy.copy(line_kwargs)
-    conf_int_kwargs = copy.copy(conf_int_kwargs)
+    fill_kwargs = copy.copy(fill_kwargs)
 
-    q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
+    q, legend_click_policy, fill_kwargs = utils._parse_deprecations(
+        q,
+        q_axis,
+        val,
+        horizontal,
+        "y",
+        click_policy,
+        legend_click_policy,
+        conf_int_kwargs,
+        fill_kwargs,
+    )
 
     if style == "formal" and complementary:
         raise NotImplementedError("Complementary formal ECDFs not yet implemented.")
@@ -216,16 +236,17 @@ def ecdf(
     if style in ["formal", "staircase"] and "line_width" not in line_kwargs:
         line_kwargs["line_width"] = 2
 
-    if conf_int_kwargs is None:
-        conf_int_kwargs = {}
-    if "fill_alpha" not in conf_int_kwargs:
-        conf_int_kwargs["fill_alpha"] = 0.5
-    if "line_alpha" not in conf_int_kwargs and "line_color" not in conf_int_kwargs:
-        conf_int_kwargs["line_alpha"] = 0
+    if fill_kwargs is None:
+        fill_kwargs = {}
+    if "fill_alpha" not in fill_kwargs:
+        fill_kwargs["fill_alpha"] = 0.3
+    if "line_alpha" not in fill_kwargs and "line_color" not in fill_kwargs:
+        fill_kwargs["line_alpha"] = 0
 
     df = data.copy()
+
     if kind == "collection":
-        if style == "dots":
+        if style == "dots" or tooltips is not None:
             df[y] = df.groupby(cats)[q].transform(_ecdf_y, complementary=complementary)
     elif kind == "colored":
         df[y] = df[q].transform(_ecdf_y, complementary=complementary)
@@ -250,12 +271,7 @@ def ecdf(
         marker_fun = utils._get_marker(p, marker)
 
     if tooltips is not None:
-        if style in ["formal", "staircase"]:
-            warnings.warn(
-                "Cannot have tooltips for formal ECDFs because there are no points to hover over. Omitting tooltips"
-            )
-        else:
-            p.add_tools(bokeh.models.HoverTool(tooltips=tooltips))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
 
     markers = []
     lines = []
@@ -265,6 +281,7 @@ def ecdf(
     rays_low = []
     patches = []
     labels = []
+    invisible_markers = []
 
     if kind == "collection":
         # Explicitly loop to enable click policies on the legend
@@ -272,8 +289,7 @@ def ecdf(
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
             labels.append(g["__label"].iloc[0])
             if conf_int:
-                conf_int_kwargs["fill_color"] = palette[i % len(palette)]
-                # conf_int_kwargs["legend_label"] = g["__label"].iloc[0]
+                fill_kwargs["fill_color"] = palette[i % len(palette)]
                 p, patch = _ecdf_conf_int(
                     p,
                     g[q],
@@ -281,14 +297,12 @@ def ecdf(
                     q_axis=q_axis,
                     n_bs_reps=n_bs_reps,
                     ptiles=ptiles,
-                    **conf_int_kwargs,
+                    **fill_kwargs,
                 )
                 patches.append(patch)
 
             marker_kwargs["color"] = palette[i % len(palette)]
-            # marker_kwargs["legend_label"] = g["__label"].iloc[0]
             line_kwargs["color"] = palette[i % len(palette)]
-            # line_kwargs["legend_label"] = g["__label"].iloc[0]
             if style == "staircase":
                 p, new_line, new_ray_high, new_ray_low = _staircase_ecdf(
                     p,
@@ -300,13 +314,32 @@ def ecdf(
                 lines.append(new_line)
                 rays_high.append(new_ray_high)
                 rays_low.append(new_ray_low)
-            elif style == "dots":
+
+            if style == "dots":
+                # Put transparent dots for hover purposes
                 if q_axis == "y":
-                    markers.append(marker_fun(source=g, x=y, y=q, **marker_kwargs))
+                    markers.append(
+                        marker_fun(
+                            source=g, x=y, y=q, name="hover_glyphs", **marker_kwargs
+                        )
+                    )
                 else:
-                    markers.append(marker_fun(source=g, x=q, y=y, **marker_kwargs))
-            elif style == "formal":
-                p, circle, segment, new_ray_high, new_ray_low, new_circle_high, new_circle_low = _formal_ecdf(
+                    markers.append(
+                        marker_fun(
+                            source=g, x=q, y=y, name="hover_glyphs", **marker_kwargs
+                        )
+                    )
+
+            if style == "formal":
+                (
+                    p,
+                    circle,
+                    segment,
+                    new_ray_high,
+                    new_ray_low,
+                    new_circle_high,
+                    new_circle_low,
+                ) = _formal_ecdf(
                     p,
                     data=g[q],
                     complementary=complementary,
@@ -320,6 +353,33 @@ def ecdf(
                 rays_low.append(new_ray_low)
                 circles_high.append(new_circle_high)
                 circles_low.append(new_circle_low)
+
+            # Add transparent dots for hovering
+            if style != "dots" and tooltips is not None:
+                if q_axis == "y":
+                    invisible_markers.append(
+                        p.circle(
+                            source=g,
+                            x=y,
+                            y=q,
+                            name="hover_glyphs",
+                            fill_alpha=0,
+                            line_alpha=0,
+                            size=7,
+                        )
+                    )
+                else:
+                    invisible_markers.append(
+                        p.circle(
+                            source=g,
+                            x=q,
+                            y=y,
+                            name="hover_glyphs",
+                            fill_alpha=0,
+                            line_alpha=0,
+                            size=7,
+                        )
+                    )
     elif kind == "colored":
         if style in ["formal", "staircase"]:
             raise RuntimeError(
@@ -327,7 +387,7 @@ def ecdf(
             )
 
         if conf_int:
-            if "fill_color" not in conf_int_kwargs:
+            if "fill_color" not in fill_kwargs:
                 conf_int_kwargs["fill_color"] = "gray"
 
             p, patch = _ecdf_conf_int(
@@ -337,7 +397,7 @@ def ecdf(
                 q_axis=q_axis,
                 n_bs_reps=n_bs_reps,
                 ptiles=ptiles,
-                **conf_int_kwargs,
+                **fill_kwargs,
             )
 
         y = "__ECCDF" if complementary else "__ECDF"
@@ -346,7 +406,6 @@ def ecdf(
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
             source = bokeh.models.ColumnDataSource(g[cols])
             mkwargs = marker_kwargs
-            # mkwargs["legend_label"] = g["__label"].iloc[0]
             mkwargs["color"] = palette[i % len(palette)]
             labels.append(g["__label"].iloc[0])
             if q_axis == "y":
@@ -359,7 +418,7 @@ def ecdf(
         show_legend,
         legend_location,
         legend_orientation,
-        click_policy,
+        legend_click_policy,
         labels,
         markers,
         lines,
@@ -368,6 +427,7 @@ def ecdf(
         rays_low,
         circles_high,
         circles_low,
+        invisible_markers,
     )
 
 
@@ -385,15 +445,21 @@ def histogram(
     legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
+    legend_click_policy="hide",
     bins="freedman-diaconis",
     density=False,
-    kind="step_filled",
-    click_policy="hide",
+    style=None,
+    conf_int=False,
+    ptiles=[2.5, 97.5],
+    n_bs_reps=10000,
     line_kwargs=None,
     fill_kwargs=None,
     rug_kwargs=None,
+    conf_int_kwargs=None,
     horizontal=None,
     val=None,
+    click_policy=None,
+    kind=None,
     **kwargs,
 ):
     """
@@ -413,7 +479,7 @@ def histogram(
         Name of column(s) to use as categorical variable(s).
     q_axis : str, either 'x' or 'y', default 'x'
         Axis along which the quantitative value varies.
-    palette : list colors, or single color string 
+    palette : list colors, or single color string
         If a list, color palette to use. If a single string representing
         a color, all glyphs are colored with that color. Default is
         colorcet.b_glasbey_category10 from the colorcet package.
@@ -441,6 +507,9 @@ def histogram(
         tuple.
     legend_orientation : str, default 'vertical'
         Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
     bins : int, array_like, or str, default 'freedman-diaconis'
         If int or array_like, setting for `bins` kwarg to be passed to
         `np.histogram()`. If 'exact', then each unique value in the
@@ -458,19 +527,28 @@ def histogram(
     density : bool, default False
         If True, normalize the histograms. Otherwise, base the
         histograms on counts.
-    kind : str, default 'step_filled'
-        The kind of histogram to display. Allowed values are 'step' and
-        'step_filled'.
-    click_policy : str, default 'hide'
-        Either 'hide', 'mute', or None; how the glyphs respond when the
-        corresponding category is clicked in the legend.
+    style : str, default 'step'
+        The style of histogram to display. Allowed values are 'step' and
+        'step_filled'. `'step_filled'` is only allowed if `conf_int` is
+        False. `'step_filled'` is really only useful when one histogram
+        is being displays, since the fill can obfuscate other
+        histograms.
+    conf_int : bool, default False
+        If True, display confidence interval of ECDF.
+    ptiles : list, default [2.5, 97.5]
+        The percentiles to use for the confidence interval. Ignored if
+        `conf_int` is False.
+    n_bs_reps : int, default 1000
+        Number of bootstrap replicates to do to compute confidence
+        interval. Ignored if `conf_int` is False.
     line_kwargs : dict
         Keyword arguments to pass to `p.line()` in constructing the
         histograms. By default, {"line_width": 2}.
     fill_kwargs : dict
         Keyword arguments to pass to `p.patch()` when making the fill
-        for the step-filled histogram. Ignored if `kind = 'step'`. By
-        default {"fill_alpha": 0.3, "line_alpha": 0}.
+        for the step-filled histogram or confidence intervals. Ignored
+        if `style = 'step'` and `conf_int` is False. By default
+        {"fill_alpha": 0.3, "line_alpha": 0}.
     rug_kwargs : dict
         Keyword arguments to pass to `p.multi_line()` when making the
         rug plot.
@@ -478,6 +556,10 @@ def histogram(
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
+    kind : str, default 'step_filled'
+        Deprecated. Use `style`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when making
         the plot.
@@ -492,10 +574,37 @@ def histogram(
     fill_kwargs = copy.copy(fill_kwargs)
     rug_kwargs = copy.copy(rug_kwargs)
 
+    # Check the deprecation of `kind` kwarg (not in utils._parse_deprecations because
+    # `kind` is a valid kwarg for ECDFs)
+    if kind is not None:
+        if style != kind:
+            raise RuntimeError(
+                "`kind` and `style` in disagreement. Use `style`; `kind` is deprecated."
+            )
+        warnings.warn(
+            f"`kind` is deprecated. Use `style`. Using style='{style}'.",
+            DeprecationWarning,
+        )
+
+    if conf_int and style == "step_filled":
+        raise RuntimeError(
+            f"`style` must be 'step' when confidence intervals are included."
+        )
+
+    q, legend_click_policy, fill_kwargs = utils._parse_deprecations(
+        q,
+        q_axis,
+        val,
+        horizontal,
+        "y",
+        click_policy,
+        legend_click_policy,
+        conf_int_kwargs,
+        fill_kwargs,
+    )
+
     if type(bins) == str and bins in ["integer", "exact"]:
         rug = False
-
-    q = utils._parse_deprecations(q, q_axis, val, horizontal, "y")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -574,15 +683,29 @@ def histogram(
         kwargs = utils._fig_dimensions(kwargs)
 
         if "x_axis_label" not in kwargs:
-            kwargs["x_axis_label"] = q
+            if q_axis == "y":
+                if density:
+                    kwargs["x_axis_label"] = "density"
+                else:
+                    kwargs["x_axis_label"] = "count"
+            else:
+                kwargs["x_axis_label"] = q
 
         if "y_axis_label" not in kwargs:
-            if density:
-                kwargs["y_axis_label"] = "density"
+            if q_axis == "y":
+                kwargs["y_axis_label"] = q
             else:
-                kwargs["y_axis_label"] = "count"
-        if "y_range" not in kwargs:
-            kwargs["y_range"] = bokeh.models.DataRange1d(start=0)
+                if density:
+                    kwargs["y_axis_label"] = "density"
+                else:
+                    kwargs["y_axis_label"] = "count"
+
+        if q_axis == "y":
+            if "x_range" not in kwargs:
+                kwargs["x_range"] = bokeh.models.DataRange1d(start=0)
+        else:
+            if "y_range" not in kwargs:
+                kwargs["y_range"] = bokeh.models.DataRange1d(start=0)
 
         p = bokeh.plotting.figure(**kwargs)
 
@@ -592,7 +715,32 @@ def histogram(
     labels = []
     patches = []
     for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
-        e0, f0 = _compute_histogram(g[q], bins, density)
+        numerical_bins, e, f = _compute_histogram(g[q], bins, density)
+        e0, f0 = _hist_for_plotting(e, f)
+
+        if conf_int:
+            fill_kwargs["fill_color"] = palette[i % len(palette)]
+
+            q_vals = g[q].values
+            f_reps = np.empty((n_bs_reps, len(f)))
+            for j in range(n_bs_reps):
+                _, _, f_reps[j, :] = _compute_histogram(
+                    np.random.choice(q_vals, len(q_vals)), numerical_bins, density
+                )
+
+            f_ptiles = np.percentile(f_reps, [2.5, 97.5], axis=0)
+
+            _, f0_low = _hist_for_plotting(e, f_ptiles[0, :])
+            _, f0_high = _hist_for_plotting(e, f_ptiles[1, :])
+            if q_axis == "y":
+                p, patch = utils._fill_between(
+                    p, f0_low, e0, f0_high, e0, **fill_kwargs
+                )
+            else:
+                p, patch = utils._fill_between(
+                    p, e0, f0_low, e0, f0_high, **fill_kwargs
+                )
+            patches.append(patch)
 
         max_height = max(f0.max(), max_height)
 
@@ -604,7 +752,7 @@ def histogram(
             lines.append(p.line(e0, f0, **line_kwargs))
         labels.append(g["__label"].iloc[0])
 
-        if kind == "step_filled":
+        if style == "step_filled":
             x2 = [e0.min(), e0.max()]
             y2 = [0, 0]
             fill_kwargs["color"] = palette[i % len(palette)]
@@ -630,6 +778,10 @@ def histogram(
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
             xs = [[q_val, q_val] for q_val in g[q].values]
             ys = [y] * len(g)
+
+            if q_axis == "y":
+                xs, ys = ys, xs
+
             if "color" not in rug_kwargs and "line_color" not in rug_kwargs:
                 p.multi_line(xs, ys, color=palette[i % len(palette)], **rug_kwargs)
             else:
@@ -640,11 +792,12 @@ def histogram(
         show_legend,
         legend_location,
         legend_orientation,
-        click_policy,
+        legend_click_policy,
         labels,
         [],
         lines,
         patches,
+        [],
         [],
         [],
         [],
@@ -745,11 +898,11 @@ def _formal_ecdf(
     ray_low : bokeh.models.glyph.LineGlyph.Ray instance
         Ray for bottom of ECDF, used for constructing clickable legend.
     circle_high : bokeh.models.glyph.LineGlyph.Ray instance
-        Open circle for top of ECDF, used for constructing clickable 
+        Open circle for top of ECDF, used for constructing clickable
         legend.
     circle_low : bokeh.models.glyph.LineGlyph.Ray instance
         Open circle for bottom of ECDF, used for constructing clickable
-        legend.    
+        legend.
     """
     # Extract data
     data = utils._convert_data(data)
@@ -834,7 +987,7 @@ def _ecdf_conf_int(
     data,
     complementary=False,
     q_axis="x",
-    n_bs_reps=1000,
+    n_bs_reps=10000,
     ptiles=[2.5, 97.5],
     **kwargs,
 ):
@@ -964,33 +1117,128 @@ def _dist_legend(
     rays_low,
     circles_high,
     circles_low,
-
+    invisible_markers,
 ):
-    """Add a legend to a histogram or ECDF plot.
-    """
+    """Add a legend to a histogram or ECDF plot."""
     if show_legend:
         if len(markers) > 0:
             if len(lines) > 0:
                 if len(patches) > 0:
-                    items = [
-                        (label, [marker, line, patch, ray_high, ray_low, circle_high, circle_low])
-                        for label, marker, line, patch, ray_high, ray_low, circle_high, circle_low in zip(
-                            labels, markers, lines, patches, rays_high, rays_low, circles_high, circles_low
-                        )
-                    ]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (
+                                label,
+                                [
+                                    line,
+                                    patch,
+                                    ray_high,
+                                    ray_low,
+                                    circle_high,
+                                    circle_low,
+                                    invisible_marker,
+                                    marker,
+                                ],
+                            )
+                            for label, line, patch, ray_high, ray_low, circle_high, circle_low, invisible_marker, marker in zip(
+                                labels,
+                                lines,
+                                patches,
+                                rays_high,
+                                rays_low,
+                                circles_high,
+                                circles_low,
+                                invisible_markers,
+                                markers,
+                            )
+                        ]
+                    else:
+                        items = [
+                            (
+                                label,
+                                [
+                                    line,
+                                    patch,
+                                    ray_high,
+                                    ray_low,
+                                    circle_high,
+                                    circle_low,
+                                    marker,
+                                ],
+                            )
+                            for label, line, patch, ray_high, ray_low, circle_high, circle_low, marker in zip(
+                                labels,
+                                lines,
+                                patches,
+                                rays_high,
+                                rays_low,
+                                circles_high,
+                                circles_low,
+                                markers,
+                            )
+                        ]
                 else:
-                    items = [
-                        (label, [marker, line, ray_high, ray_low, circle_high, circle_low])
-                        for label, marker, line, ray_high, ray_low, circle_high, circle_low in zip(
-                            labels, markers, lines, rays_high, rays_low, circles_high, circles_low
-                        )
-                    ]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (
+                                label,
+                                [
+                                    line,
+                                    ray_high,
+                                    ray_low,
+                                    circle_high,
+                                    circle_low,
+                                    invisible_marker,
+                                    marker,
+                                ],
+                            )
+                            for label, line, ray_high, ray_low, circle_high, circle_low, invisible_marker, marker in zip(
+                                labels,
+                                lines,
+                                rays_high,
+                                rays_low,
+                                circles_high,
+                                circles_low,
+                                invisible_markers,
+                                markers,
+                            )
+                        ]
+                    else:
+                        items = [
+                            (
+                                label,
+                                [
+                                    line,
+                                    ray_high,
+                                    ray_low,
+                                    circle_high,
+                                    circle_low,
+                                    marker,
+                                ],
+                            )
+                            for label, line, ray_high, ray_low, circle_high, circle_low, marker in zip(
+                                labels,
+                                lines,
+                                rays_high,
+                                rays_low,
+                                circles_high,
+                                circles_low,
+                                markers,
+                            )
+                        ]
             else:
                 if len(patches) > 0:
-                    items = [
-                        (label, [marker, patch])
-                        for label, marker, patch in zip(labels, markers, patches)
-                    ]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (label, [marker, invisible_marker, patch])
+                            for label, marker, invisible_marker, patch in zip(
+                                labels, markers, invisible_markers, patches
+                            )
+                        ]
+                    else:
+                        items = [
+                            (label, [marker, patch])
+                            for label, marker, patch in zip(labels, markers, patches)
+                        ]
                 else:
                     items = [
                         (label, [marker]) for label, marker in zip(labels, markers)
@@ -998,20 +1246,64 @@ def _dist_legend(
         else:
             if len(patches) > 0:
                 if len(rays_high) > 0:
-                    items = [
-                        (label, [line, patch, ray_high, ray_low])
-                        for label, line, patch, ray_high, ray_low in zip(labels, lines, patches, rays_high, rays_low)
-                    ]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (label, [line, patch, ray_high, ray_low, invisible_marker])
+                            for label, line, patch, ray_high, ray_low, invisible_marker in zip(
+                                labels,
+                                lines,
+                                patches,
+                                rays_high,
+                                rays_low,
+                                invisible_markers,
+                            )
+                        ]
+                    else:
+                        items = [
+                            (label, [line, patch, ray_high, ray_low])
+                            for label, line, patch, ray_high, ray_low in zip(
+                                labels, lines, patches, rays_high, rays_low
+                            )
+                        ]
                 else:
-                    items = [
-                        (label, [line, patch])
-                        for label, line, patch in zip(labels, lines, patches)
-                    ]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (label, [line, patch, invisible_marker])
+                            for label, line, patch, invisible_marker in zip(
+                                labels, lines, patches, invisible_markers
+                            )
+                        ]
+                    else:
+                        items = [
+                            (label, [line, patch])
+                            for label, line, patch in zip(labels, lines, patches)
+                        ]
             else:
                 if len(rays_high) > 0:
-                    items = [(label, [line, ray_high, ray_low]) for label, line, ray_high, ray_low in zip(labels, lines, rays_high, rays_low)]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (label, [line, ray_high, ray_low, invisible_marker])
+                            for label, line, ray_high, ray_low, invisible_marker in zip(
+                                labels, lines, rays_high, rays_low, invisible_markers
+                            )
+                        ]
+                    else:
+                        items = [
+                            (label, [line, ray_high, ray_low])
+                            for label, line, ray_high, ray_low in zip(
+                                labels, lines, rays_high, rays_low
+                            )
+                        ]
                 else:
-                    items = [(label, [line]) for label, line in zip(labels, lines)]
+                    if len(invisible_markers) > 0:
+                        items = [
+                            (label, [line, invisible_marker])
+                            for label, line, invisible_marker in zip(
+                                labels, lines, invisible_markers
+                            )
+                        ]
+                    else:
+                        items = [(label, [line]) for label, line in zip(labels, lines)]
 
         if len(p.legend) == 1:
             for item in items:
@@ -1060,6 +1352,7 @@ def _dist_legend(
 
 
 def _compute_histogram(data, bins, density):
+    """Computes the bins and edges of a histogram."""
     if type(bins) == str and bins == "sqrt":
         bins = int(np.ceil(np.sqrt(len(data))))
     elif type(bins) == str and bins == "freedman-diaconis":
@@ -1070,6 +1363,13 @@ def _compute_histogram(data, bins, density):
             bins = int(np.ceil((data.max() - data.min()) / h))
 
     f, e = np.histogram(data, bins=bins, density=density)
+
+    return bins, e, f
+
+
+def _hist_for_plotting(e, f):
+    """Takes output e and f from _compute_histogram(), and generates
+    x, y values for plotting the histogram."""
     e0 = np.empty(2 * len(e))
     f0 = np.empty(2 * len(e))
     e0[::2] = e

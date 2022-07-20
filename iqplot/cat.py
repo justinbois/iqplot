@@ -21,6 +21,9 @@ def strip(
     order=None,
     p=None,
     show_legend=False,
+    legend_location="right",
+    legend_orientation="vertical",
+    legend_click_policy="hide",
     color_column=None,
     parcoord_column=None,
     tooltips=None,
@@ -31,6 +34,7 @@ def strip(
     parcoord_kwargs=None,
     horizontal=None,
     val=None,
+    click_policy=None,
     **kwargs,
 ):
     """
@@ -65,6 +69,19 @@ def strip(
         figure `p`.
     show_legend : bool, default False
         If True, display legend.
+    legend_location : str, default 'right'
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
     color_column : hashable, default None
         Column of `data` to use in determining color of glyphs. If None,
         then `cats` is used.
@@ -98,6 +115,8 @@ def strip(
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when
         instantiating the figure.
@@ -111,7 +130,9 @@ def strip(
     jitter_kwargs = copy.copy(jitter_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
 
-    q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
+    q, legend_click_policy, _ = utils._parse_deprecations(
+        q, q_axis, val, horizontal, "x", click_policy, legend_click_policy, None, None
+    )
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -166,15 +187,22 @@ def strip(
     ):
         if color_column is None:
             color_column = "cat"
+            if show_legend:
+                warnings.warn(
+                    "`color_column` is not specified. No legend will be generated."
+                )
+                show_legend = False
         if color_factors == "hex":
             marker_kwargs["color"] = color_column
             if show_legend:
-                warnings.warn('`color_column` consists of hex colors. No legend will be generated.')
+                warnings.warn(
+                    "`color_column` consists of hex colors. No legend will be generated."
+                )
                 show_legend = False
-        else:
+        elif not show_legend:
             marker_kwargs["color"] = bokeh.transform.factor_cmap(
-                color_column, palette=palette, factors=color_factors
-            )
+                    color_column, palette=palette, factors=color_factors
+                )
 
     if marker == "tick":
         marker = "dash"
@@ -189,10 +217,7 @@ def strip(
             else:
                 marker_kwargs["size"] = p.plot_width * 0.25 / len(grouped)
 
-    source = _cat_source(data, cats, cols, color_column)
-
-    if show_legend and "legend_field" not in marker_kwargs:
-        marker_kwargs["legend_field"] = "__label"
+    source_dict = _cat_source_dict(data, cats, cols, color_column)
 
     if q_axis == "x":
         x = q
@@ -229,7 +254,64 @@ def strip(
             source=source_pc, xs="xs", ys="ys", line_color=line_color, **parcoord_kwargs
         )
 
-    marker_fun(source=source, x=x, y=y, **marker_kwargs)
+    if color_factors == "hex" or color_column == "cat" or not show_legend:
+        marker_fun(
+            source=bokeh.models.ColumnDataSource(source_dict), x=x, y=y, **marker_kwargs
+        )
+    else:
+        items = []
+        df = pd.DataFrame(source_dict)
+        for i, (name, g) in enumerate(df.groupby(color_column)):
+            marker_kwargs["color"] = palette[i % len(palette)]
+            mark = marker_fun(source=g, x=x, y=y, **marker_kwargs)
+            items.append((g["__label"].iloc[0], [mark]))
+
+        if len(p.legend) == 1:
+            for item in items:
+                p.legend.items.append(
+                    bokeh.models.LegendItem(label=item[0], renderers=item[1])
+                )
+        else:
+            if len(p.legend) > 1:
+                warnings.warn(
+                    "Ambiguous which legend to add glyphs to. Creating new legend."
+                )
+            if legend_location in ["right", "left", "above", "below"]:
+                legend = bokeh.models.Legend(
+                    items=items,
+                    location="center",
+                    orientation=legend_orientation,
+                    title=color_column,
+                )
+                p.add_layout(legend, legend_location)
+            elif (
+                legend_location
+                in [
+                    "top_left",
+                    "top_center",
+                    "top_right",
+                    "center_right",
+                    "bottom_right",
+                    "bottom_center",
+                    "bottom_left",
+                    "center_left",
+                    "center",
+                ]
+                or type(legend_location) == tuple
+            ):
+                legend = bokeh.models.Legend(
+                    items=items,
+                    location=legend_location,
+                    orientation=legend_orientation,
+                    title=color_column,
+                )
+                p.add_layout(legend, "center")
+            else:
+                raise RuntimeError(
+                    'Invalid `legend_location`. Must be a 2-tuple specifying location or one of ["right", "left", "above", "below", "top_left", "top_center", "top_right", "center_right", "bottom_right", "bottom_center", "bottom_left", "center_left", "center"]'
+                )
+
+        p.legend.click_policy = legend_click_policy
 
     return p
 
@@ -344,7 +426,7 @@ def box(
     whisker_kwargs = copy.copy(whisker_kwargs)
     outlier_kwargs = copy.copy(outlier_kwargs)
 
-    q = utils._parse_deprecations(q, q_axis, val, horizontal, "x")
+    q, _, _ = utils._parse_deprecations(q, q_axis, val, horizontal, "x", None, None, None, None)
 
     if display_outliers is not None:
         warnings.warn(
@@ -559,6 +641,9 @@ def stripbox(
     order=None,
     p=None,
     show_legend=False,
+    legend_location="right",
+    legend_orientation="vertical",
+    legend_click_policy="hide",
     top_level="strip",
     color_column=None,
     parcoord_column=None,
@@ -576,6 +661,7 @@ def stripbox(
     whisker_kwargs=None,
     horizontal=None,
     val=None,
+    click_policy=None,
     **kwargs,
 ):
     """
@@ -613,6 +699,19 @@ def stripbox(
         is overlaid.
     show_legend : bool, default False
         If True, display legend.
+    legend_location : str, default 'right'
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
     color_column : hashable, default None
         Column of `data` to use in determining color of glyphs. The data
         in the color_column are assumed to be categorical. If the data
@@ -664,6 +763,8 @@ def stripbox(
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when
         instantiating the figure.
@@ -853,7 +954,7 @@ def _cat_figure(df, grouped, q, order, color_column, q_axis, kwargs):
     return bokeh.plotting.figure(**kwargs), factors, color_factors
 
 
-def _cat_source(df, cats, cols, color_column):
+def _cat_source_dict(df, cats, cols, color_column):
     cat_source, labels = utils._source_and_labels_from_cats(df, cats)
 
     if type(cols) in [list, tuple, pd.core.indexes.base.Index]:
@@ -868,7 +969,7 @@ def _cat_source(df, cats, cols, color_column):
         source_dict["__label"] = list(df[color_column].astype(str).values)
         source_dict[color_column] = list(df[color_column].astype(str).values)
 
-    return bokeh.models.ColumnDataSource(source_dict)
+    return source_dict
 
 
 def _parcoord_source(data, q, cats, q_axis, parcoord_column, factors):
@@ -960,8 +1061,13 @@ def _box_source(df, cats, q, cols, min_data):
     df_box = grouped[q].apply(_box_and_whisker, min_data).unstack().reset_index()
     df_box = df_box.dropna()
 
-    source_box = _cat_source(
-        df_box, cats, ["middle", "bottom", "top", "top_whisker", "bottom_whisker"], None
+    source_box = bokeh.models.ColumnDataSource(
+        _cat_source_dict(
+            df_box,
+            cats,
+            ["middle", "bottom", "top", "top_whisker", "bottom_whisker"],
+            None,
+        )
     )
 
     # Data frame for outliers
@@ -978,6 +1084,8 @@ def _box_source(df, cats, q, cols, min_data):
     df_outliers.index = inds
     df_outliers[cols] = df_source.loc[inds, cols]
 
-    source_outliers = _cat_source(df_outliers, cats, cols, None)
+    source_outliers = bokeh.models.ColumnDataSource(
+        _cat_source_dict(df_outliers, cats, cols, None)
+    )
 
     return source_box, source_outliers

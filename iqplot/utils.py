@@ -1,4 +1,5 @@
 """Utility functions for parsing inputs."""
+import copy
 import warnings
 
 import numpy as np
@@ -26,7 +27,9 @@ def _fig_dimensions(kwargs):
     return kwargs
 
 
-def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
+def _parse_deprecations(
+    q, q_axis, val, horizontal, horiz_q_axis, click_policy, legend_click_policy, conf_int_kwargs, fill_kwargs
+):
     if q_axis not in ("x", "y"):
         raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
 
@@ -49,11 +52,37 @@ def _parse_deprecations(q, q_axis, val, horizontal, horiz_q_axis):
                 "`val` and `q` in disagreement. Use `q`; `val` is deprecated."
             )
 
+        warnings.warn(f"`val` is deprecated. Use `q`. Using q={q}.", DeprecationWarning)
+
+    if click_policy is not None:
+        if legend_click_policy is None:
+            legend_click_policy = click_policy
+        elif click_policy != legend_click_policy:
+            raise RuntimeError(
+                "`click_policy` and `legend_click_policy` in disagreement. Use `legend_click_policy`; `click_policy` is deprecated."
+            )
+
         warnings.warn(
-            f"`val` is deprecated. Use `q`. Using `q={q}.", DeprecationWarning
+            f"`click_policy` is deprecated. Use `legend_click_policy`. Using legend_click_policy='{legend_click_policy}'."
         )
 
-    return q
+
+    if conf_int_kwargs is not None:
+        if fill_kwargs is None:
+            fill_kwargs = copy.copy(conf_int_kwargs)
+            warnings.warn(
+                f"`conf_int_kwargs is deprecated. Use `fill_kwargs`."
+            )
+        elif conf_int_kwargs != fill_kwargs:
+            raise RuntimeError(
+                "`fill_kwargs` and `conf_int_kwargs` in disagreement. Use `fill_kwargs`; `conf_int_kwargs` is deprecated."
+            )
+
+        warnings.warn(
+            f"`conf_int_kwargs is deprecated. Use `fill_kwargs`."
+        )
+
+    return q, legend_click_policy, fill_kwargs
 
 
 def _data_cats(data, q, cats, show_legend, legend_label):
