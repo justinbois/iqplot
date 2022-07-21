@@ -23,7 +23,7 @@ def ecdf(
     palette=None,
     order=None,
     p=None,
-    show_legend=True,
+    show_legend=None,
     legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
@@ -180,6 +180,37 @@ def ecdf(
     elif type(palette) == str:
         palette = [palette]
 
+    if arrangement == "stack":
+        if kind != "collection":
+            raise RuntimeError("Must have kind='collection' if arrangment='stack'.")
+        if show_legend is None:
+            show_legend = False
+        if show_legend:
+            warnings.warn(
+                "Cannot show legend with arrangement='stack'. There is no legend to show."
+            )
+        if cats is not None:
+            return _stacked_ecdfs(
+                data,
+                q=q,
+                cats=cats,
+                q_axis=q_axis,
+                palette=palette,
+                order=order,
+                tooltips=tooltips,
+                complementary=complementary,
+                kind=kind,
+                style=style,
+                conf_int=conf_int,
+                ptiles=ptiles,
+                n_bs_reps=n_bs_reps,
+                marker=marker,
+                marker_kwargs=marker_kwargs,
+                line_kwargs=line_kwargs,
+                fill_kwargs=fill_kwargs,
+                **kwargs,
+            )
+
     data, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
     )
@@ -242,6 +273,7 @@ def ecdf(
         fill_kwargs["fill_alpha"] = 0.3
     if "line_alpha" not in fill_kwargs and "line_color" not in fill_kwargs:
         fill_kwargs["line_alpha"] = 0
+    fill_fill_color_supplied = "fill_color" in fill_kwargs
 
     df = data.copy()
 
@@ -289,7 +321,8 @@ def ecdf(
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
             labels.append(g["__label"].iloc[0])
             if conf_int:
-                fill_kwargs["fill_color"] = palette[i % len(palette)]
+                if not fill_fill_color_supplied:
+                    fill_kwargs["fill_color"] = palette[i % len(palette)]
                 p, patch = _ecdf_conf_int(
                     p,
                     g[q],
@@ -980,6 +1013,141 @@ def _to_staircase(x, y):
     x_staircase[1::2] = x
 
     return x_staircase, y_staircase
+
+
+def _stacked_ecdfs(
+    data,
+    q=None,
+    cats=None,
+    q_axis="x",
+    palette=None,
+    order=None,
+    tooltips=None,
+    complementary=False,
+    kind="collection",
+    style="dots",
+    conf_int=False,
+    ptiles=[2.5, 97.5],
+    n_bs_reps=10000,
+    marker="circle",
+    marker_kwargs=None,
+    line_kwargs=None,
+    fill_kwargs=None,
+    **kwargs,
+):
+    ps = []
+
+    if type(cats) in [list, tuple] and len(cats) == 1:
+        cats = cats[0]
+
+    # Protect against mutability and get copies
+    df = data.copy()
+    kwargs = copy.copy(kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+    line_kwargs = copy.copy(line_kwargs)
+    fill_kwargs = copy.copy(fill_kwargs)
+
+    if order is not None:
+        if type(cats) in [list, tuple]:
+            df["__sort"] = df.apply(lambda r: order.index(tuple(r[cats])), axis=1)
+        else:
+            df["__sort"] = df.apply(lambda r: order.index(r[cats]), axis=1)
+        df = df.sort_values(by="__sort")
+
+    if (
+        "frame_width" not in kwargs
+        and "width" not in kwargs
+        and "plot_width" not in kwargs
+    ):
+        if q_axis == "y":
+            kwargs["frame_width"] = 100
+    if (
+        "frame_height" not in kwargs
+        and "height" not in kwargs
+        and "plot_height" not in kwargs
+    ):
+        if q_axis == "x":
+            kwargs["frame_height"] = 100
+    if "min_border" not in kwargs:
+        kwargs["min_border"] = kwargs.pop("min_border", 5)
+
+    if marker_kwargs is None:
+        marker_kwargs = {}
+    if line_kwargs is None:
+        line_kwargs = {}
+    if fill_kwargs is None:
+        fill_kwargs = {}
+
+    marker_fill_color_supplied = "fill_color" in marker_kwargs
+    marker_line_color_supplied = "line_color" in marker_kwargs
+    line_line_color_supplied = "line_color" in line_kwargs
+    fill_fill_color_supplied = "fill_color" in fill_kwargs
+
+    for i, (name, g) in enumerate(df.groupby(cats)):
+        color = palette[i % len(palette)]
+        if not marker_fill_color_supplied:
+            marker_kwargs["fill_color"] = color
+        if not marker_line_color_supplied:
+            marker_kwargs["line_color"] = color
+        if not line_line_color_supplied:
+            line_kwargs["line_color"] = color
+        if not fill_fill_color_supplied:
+            fill_kwargs["fill_color"] = color
+
+        if q_axis == "x":
+            kwargs["y_axis_label"] = str(name)
+        else:
+            kwargs["x_axis_label"] = q
+            kwargs["title"] = str(name)
+
+        ps.append(
+            ecdf(
+                data=g,
+                q=q,
+                q_axis=q_axis,
+                tooltips=tooltips,
+                complementary=complementary,
+                kind=kind,
+                style=style,
+                conf_int=conf_int,
+                ptiles=ptiles,
+                n_bs_reps=n_bs_reps,
+                marker=marker,
+                marker_kwargs=marker_kwargs,
+                line_kwargs=line_kwargs,
+                fill_kwargs=fill_kwargs,
+                **kwargs,
+            )
+        )
+
+    if q_axis == "x":
+        for i, _ in enumerate(ps[:-1]):
+            ps[i].xaxis.visible = False
+            ps[i].xaxis.axis_label = None
+            ps[i].x_range = ps[-1].x_range
+            ps[i].y_range = ps[-1].y_range
+
+        for i, _ in enumerate(ps):
+            ps[i].yaxis.minor_tick_out = 0
+            ps[i].yaxis.axis_label_text_font_style = "bold"
+            ps[i].yaxis.axis_label_text_color = "#696969"
+
+        return bokeh.layouts.gridplot(ps, ncols=1)
+    else:
+        for i, _ in enumerate(ps[1:]):
+            ps[i + 1].yaxis.visible = False
+            ps[i + 1].yaxis.axis_label = None
+            ps[i + 1].x_range = ps[0].x_range
+            ps[i + 1].y_range = ps[0].y_range
+
+        for i, _ in enumerate(ps):
+            ps[i].xaxis.minor_tick_out = 0
+            ps[i].xaxis.major_label_orientation = np.pi / 3
+            ps[i].title.align = "center"
+            ps[i].title.text_font_style = "bold"
+            ps[i].title.text_color = "#696969"
+
+        return bokeh.layouts.gridplot(ps, ncols=len(ps))
 
 
 def _ecdf_conf_int(
