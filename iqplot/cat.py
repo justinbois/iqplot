@@ -20,7 +20,7 @@ def strip(
     palette=None,
     order=None,
     p=None,
-    show_legend=False,
+    show_legend=None,
     legend_location="right",
     legend_orientation="vertical",
     legend_click_policy="hide",
@@ -29,6 +29,7 @@ def strip(
     tooltips=None,
     marker="circle",
     jitter=False,
+    cat_grid=False,
     marker_kwargs=None,
     jitter_kwargs=None,
     parcoord_kwargs=None,
@@ -101,6 +102,8 @@ def strip(
         'triangle', 'x']
     jitter : bool, default False
         If True, apply a jitter transform to the glyphs.
+    cat_grid : bool, default False
+        If True, show grid lines for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
         ["x", "y", "source", "cat", "legend"] are note allowed because
@@ -137,6 +140,12 @@ def strip(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
+    if show_legend is None:
+        if color_column is None:
+            show_legend = False
+        else:
+            show_legend = not _color_column_hexcodes(data, color_column)
+
     data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend, None)
 
     cats, cols = utils._check_cat_input(
@@ -160,7 +169,7 @@ def strip(
         )
 
     if tooltips is not None:
-        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
 
     if jitter_kwargs is None:
         jitter_kwargs = dict(width=0.1, mean=0, distribution="normal")
@@ -201,8 +210,8 @@ def strip(
                 show_legend = False
         elif not show_legend:
             marker_kwargs["color"] = bokeh.transform.factor_cmap(
-                    color_column, palette=palette, factors=color_factors
-                )
+                color_column, palette=palette, factors=color_factors
+            )
 
     if marker == "tick":
         marker = "dash"
@@ -226,7 +235,8 @@ def strip(
             y = bokeh.transform.jitter("cat", **jitter_kwargs)
         else:
             y = "cat"
-        p.ygrid.grid_line_color = None
+        if not cat_grid:
+            p.ygrid.grid_line_color = None
     else:
         y = q
         if jitter:
@@ -234,7 +244,8 @@ def strip(
             x = bokeh.transform.jitter("cat", **jitter_kwargs)
         else:
             x = "cat"
-        p.xgrid.grid_line_color = None
+        if not cat_grid:
+            p.xgrid.grid_line_color = None
 
     if parcoord_column is not None:
         source_pc = _parcoord_source(data, q, cats, q_axis, parcoord_column, factors)
@@ -256,14 +267,14 @@ def strip(
 
     if color_factors == "hex" or color_column == "cat" or not show_legend:
         marker_fun(
-            source=bokeh.models.ColumnDataSource(source_dict), x=x, y=y, **marker_kwargs
+            source=bokeh.models.ColumnDataSource(source_dict), x=x, y=y, name="hover_glyphs", **marker_kwargs
         )
     else:
         items = []
         df = pd.DataFrame(source_dict)
         for i, (name, g) in enumerate(df.groupby(color_column)):
             marker_kwargs["color"] = palette[i % len(palette)]
-            mark = marker_fun(source=g, x=x, y=y, **marker_kwargs)
+            mark = marker_fun(source=g, x=x, y=y, name="hover_glyphs", **marker_kwargs)
             items.append((g["__label"].iloc[0], [mark]))
 
         if len(p.legend) == 1:
@@ -328,6 +339,7 @@ def box(
     display_points=True,
     outlier_marker="circle",
     min_data=5,
+    cat_grid=False,
     box_kwargs=None,
     median_kwargs=None,
     whisker_kwargs=None,
@@ -384,6 +396,8 @@ def box(
         Minimum number of data points in a given category in order to
         make a box and whisker. Otherwise, individual data points are
         plotted as in a strip plot.
+    cat_grid : bool, default False
+        If True, display grid line for categorical axis.
     box_kwargs : dict, default None
         A dictionary of kwargs to be passed into `p.hbar()` or
         `p.vbar()` when constructing the boxes for the box plot.
@@ -426,7 +440,9 @@ def box(
     whisker_kwargs = copy.copy(whisker_kwargs)
     outlier_kwargs = copy.copy(outlier_kwargs)
 
-    q, _, _ = utils._parse_deprecations(q, q_axis, val, horizontal, "x", None, None, None, None)
+    q, _, _ = utils._parse_deprecations(
+        q, q_axis, val, horizontal, "x", None, None, None, None
+    )
 
     if display_outliers is not None:
         warnings.warn(
@@ -574,7 +590,8 @@ def box(
         )
         if display_points:
             marker_fun(source=source_outliers, y="cat", x=q, **outlier_kwargs)
-        p.ygrid.grid_line_color = None
+        if not cat_grid:
+            p.ygrid.grid_line_color = None
     else:
         p.segment(
             source=source_box,
@@ -627,7 +644,8 @@ def box(
         )
         if display_points:
             marker_fun(source=source_outliers, x="cat", y=q, **outlier_kwargs)
-        p.xgrid.grid_line_color = None
+        if not cat_grid:
+            p.xgrid.grid_line_color = None
 
     return p
 
@@ -650,6 +668,7 @@ def stripbox(
     tooltips=None,
     marker="circle",
     jitter=False,
+    cat_grid=False,
     marker_kwargs=None,
     jitter_kwargs=None,
     parcoord_kwargs=None,
@@ -734,6 +753,8 @@ def stripbox(
         'triangle', 'x']
     jitter : bool, default False
         If True, apply a jitter transform to the glyphs.
+    cat_grid : bool, default False
+        If True, display grid line for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
         ["x", "y", "source", "cat", "legend"] are note allowed because
@@ -772,7 +793,7 @@ def stripbox(
     Returns
     -------
     output : bokeh.plotting.Figure instance
-        Plot populated with a strip plot.
+        Plot populated with a strip-box plot.
     """
     # Protect against mutability of dicts
     box_kwargs = copy.copy(box_kwargs)
@@ -812,11 +833,287 @@ def stripbox(
             order=order,
             p=p,
             show_legend=show_legend,
+            legend_location=legend_location,
+            legend_orientation=legend_orientation,
+            legend_click_policy=legend_click_policy,
             color_column=color_column,
             parcoord_column=parcoord_column,
             tooltips=tooltips,
             marker=marker,
             jitter=jitter,
+            cat_grid=cat_grid,
+            marker_kwargs=marker_kwargs,
+            jitter_kwargs=jitter_kwargs,
+            parcoord_kwargs=parcoord_kwargs,
+            horizontal=horizontal,
+            val=val,
+            click_policy=click_policy,
+            **kwargs,
+        )
+
+        p = box(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            display_points=False,
+            whisker_caps=whisker_caps,
+            min_data=min_data,
+            box_kwargs=box_kwargs,
+            median_kwargs=median_kwargs,
+            whisker_kwargs=whisker_kwargs,
+            horizontal=horizontal,
+            val=val,
+        )
+    elif top_level == "strip":
+        p = box(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            display_points=False,
+            cat_grid=cat_grid,
+            whisker_caps=whisker_caps,
+            min_data=min_data,
+            box_kwargs=box_kwargs,
+            median_kwargs=median_kwargs,
+            whisker_kwargs=whisker_kwargs,
+            horizontal=horizontal,
+            val=val,
+            **kwargs,
+        )
+
+        p = strip(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            show_legend=show_legend,
+            legend_location=legend_location,
+            legend_orientation=legend_orientation,
+            legend_click_policy=legend_click_policy,
+            color_column=color_column,
+            parcoord_column=parcoord_column,
+            tooltips=tooltips,
+            marker=marker,
+            jitter=jitter,
+            cat_grid=cat_grid,
+            marker_kwargs=marker_kwargs,
+            jitter_kwargs=jitter_kwargs,
+            parcoord_kwargs=parcoord_kwargs,
+            horizontal=horizontal,
+            val=val,
+            click_policy=click_policy,
+            **kwargs,
+        )
+    else:
+        raise RuntimeError("Invalid `top_level`. Allowed values are 'box' and 'strip'.")
+
+    return p
+
+
+def striphistogram(
+    data=None,
+    q=None,
+    cats=None,
+    q_axis="x",
+    palette=None,
+    order=None,
+    p=None,
+    show_legend=False,
+    legend_location="right",
+    legend_orientation="vertical",
+    legend_click_policy="hide",
+    top_level="strip",
+    color_column=None,
+    parcoord_column=None,
+    tooltips=None,
+    marker="circle",
+    jitter=False,
+    cat_grid=False,
+    marker_kwargs=None,
+    jitter_kwargs=None,
+    parcoord_kwargs=None,
+    bins="freedman-diaconis",
+    density=None,
+    style=None,
+    mirror=False,
+    hist_height=0.75,
+    conf_int=False,
+    ptiles=[2.5, 97.5],
+    n_bs_reps=10000,
+    line_kwargs=None,
+    fill_kwargs=None,
+    horizontal=None,
+    val=None,
+    click_policy=None,
+    **kwargs,
+):
+    """
+    Make a strip plot with a histogram as annotation.
+
+    Parameters
+    ----------
+    data : Pandas DataFrame, 1D Numpy array, or xarray
+        DataFrame containing tidy data for plotting.  If a Numpy array,
+        a single category is assumed and a strip plot generated from
+        data.
+    q : hashable
+        Name of column to use as quantitative variable if `data` is a
+        Pandas DataFrame. Otherwise, `q` is used as the quantitative
+        axis label.
+    cats : hashable or list of hashables
+        Name of column(s) to use as categorical variable(s).
+    q_axis : str, either 'x' or 'y', default 'x'
+        Axis along which the quantitative value varies.
+    palette : list of strings of hex colors, or single hex string
+        If a list, color palette to use. If a single string representing
+        a hex color, all glyphs are colored with that color. Default is
+        colorcet.b_glasbey_category10 from the colorcet package.
+    order : list or None
+        If not None, must be a list of unique group names when the input
+        data frame is grouped by `cats`. The order of the list specifies
+        the ordering of the categorical variables on the categorical
+        axis and legend. If None, the categories appear in the order in
+        which they appeared in the inputted data frame.
+    p : bokeh.plotting.Figure instance, or None (default)
+        If None, create a new figure. Otherwise, populate the existing
+        figure `p`.
+    top_level : str, default 'strip'
+        If 'box', the box plot is overlaid. If 'strip', the strip plot
+        is overlaid.
+    show_legend : bool, default False
+        If True, display legend.
+    legend_location : str, default 'right'
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
+    color_column : hashable, default None
+        Column of `data` to use in determining color of glyphs. The data
+        in the color_column are assumed to be categorical. If the data
+        in color_column consist entirely of hex colors, then those
+        colors are directly used to color the glyphs. If None,
+        then `cats` is used.
+    parcoord_column : hashable, default None
+        Column of `data` to use to construct a parallel coordinate plot.
+        Data points with like entries in the parcoord_column are
+        connected with lines in the strip plot.
+    tooltips : list of 2-tuples
+        Specification for tooltips as per Bokeh specifications. For
+        example, if we want `col1` and `col2` tooltips, we can use
+        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
+    marker : str, default 'circle'
+        Name of marker to be used in the plot (ignored if `formal` is
+        False). Must be one of['asterisk', 'circle', 'circle_cross',
+        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
+        'inverted_triangle', 'square', 'square_cross', 'square_x',
+        'triangle', 'x']
+    jitter : bool, default False
+        If True, apply a jitter transform to the glyphs.
+    cat_grid : bool, default False
+        If True, display grid line for categorical axis.
+    marker_kwargs : dict
+        Keyword arguments to pass when adding markers to the plot.
+        ["x", "y", "source", "cat", "legend"] are note allowed because
+        they are determined by other inputs.
+    jitter_kwargs : dict
+        Keyword arguments to be passed to `bokeh.transform.jitter()`. If
+        not specified, default is
+        `{'distribution': 'normal', 'width': 0.1}`. If the user
+        specifies `{'distribution': 'uniform'}`, the `'width'` entry is
+        adjusted to 0.4.
+    whisker_caps : bool, default True
+        If True, put caps on whiskers. If False, omit caps.
+    min_data : int, default 5
+        Minimum number of data points in a given category in order to
+        make a box and whisker. Otherwise, individual data points are
+        plotted as in a strip plot.
+    box_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.hbar()` or
+        `p.vbar()` when constructing the boxes for the box plot.
+    median_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.hbar()` or
+        `p.vbar()` when constructing the median line for the box plot.
+    whisker_kwargs : dict, default None
+        A dictionary of kwargs to be passed into `p.segment()`
+        when constructing the whiskers for the box plot.
+    horizontal : bool or None, default None
+        Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
+    kwargs
+        Any kwargs to be passed to `bokeh.plotting.figure()` when
+        instantiating the figure.
+
+    Returns
+    -------
+    output : bokeh.plotting.Figure instance
+        Plot populated with a strip-histogram plot.
+    """
+    # Protect against mutability of dicts
+    box_kwargs = copy.copy(box_kwargs)
+    median_kwargs = copy.copy(median_kwargs)
+    whisker_kwargs = copy.copy(whisker_kwargs)
+    jitter_kwargs = copy.copy(jitter_kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+    parcoord_kwargs = copy.copy(parcoord_kwargs)
+
+    # Set defaults
+    if box_kwargs is None:
+        box_kwargs = dict(line_color="gray", fill_alpha=0)
+    if "color" not in box_kwargs and "line_color" not in box_kwargs:
+        box_kwargs["line_color"] = "gray"
+    if ("fill_alpha" not in box_kwargs) and ("fill_color" not in box_kwargs):
+        box_kwargs["fill_alpha"] = 0
+    elif ("fill_color" in box_kwargs) and ("fill_alpha" not in box_kwargs):
+        box_kwargs["fill_alpha"] = 0.5
+
+    if median_kwargs is None:
+        median_kwargs = dict(line_color="gray")
+    if "color" not in box_kwargs and "line_color" not in median_kwargs:
+        median_kwargs["line_color"] = "gray"
+
+    if whisker_kwargs is None:
+        whisker_kwargs = dict(line_color="gray")
+    if "color" not in box_kwargs and "line_color" not in whisker_kwargs:
+        whisker_kwargs["line_color"] = "gray"
+
+    if top_level == "histogram":
+        p = strip(
+            data=data,
+            q=q,
+            cats=cats,
+            q_axis=q_axis,
+            palette=palette,
+            order=order,
+            p=p,
+            show_legend=show_legend,
+            color_column=color_column,
+            parcoord_column=parcoord_column,
+            tooltips=tooltips,
+            marker=marker,
+            jitter=jitter,
+            cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
             parcoord_kwargs=parcoord_kwargs,
@@ -852,6 +1149,7 @@ def stripbox(
             order=order,
             p=p,
             display_points=False,
+            cat_grid=cat_grid,
             whisker_caps=whisker_caps,
             min_data=min_data,
             box_kwargs=box_kwargs,

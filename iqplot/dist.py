@@ -13,6 +13,7 @@ import bokeh.models
 import bokeh.plotting
 
 from . import utils
+from . import cat
 
 
 def ecdf(
@@ -120,7 +121,7 @@ def ecdf(
     ptiles : list, default [2.5, 97.5]
         The percentiles to use for the confidence interval. Ignored if
         `conf_int` is False.
-    n_bs_reps : int, default 1000
+    n_bs_reps : int, default 10,000
         Number of bootstrap replicates to do to compute confidence
         interval. Ignored if `conf_int` is False.
     marker : str, default 'circle'
@@ -183,12 +184,15 @@ def ecdf(
     if arrangement == "stack":
         if kind != "collection":
             raise RuntimeError("Must have kind='collection' if arrangment='stack'.")
+
         if show_legend is None:
             show_legend = False
+
         if show_legend:
             warnings.warn(
                 "Cannot show legend with arrangement='stack'. There is no legend to show."
             )
+
         if cats is not None:
             return _stacked_ecdfs(
                 data,
@@ -210,6 +214,9 @@ def ecdf(
                 fill_kwargs=fill_kwargs,
                 **kwargs,
             )
+    else:
+        if show_legend is None:
+            show_legend = True
 
     data, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
@@ -289,12 +296,7 @@ def ecdf(
     _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
     cols += ["__label"]
 
-    if order is not None:
-        if type(cats) in [list, tuple]:
-            df["__sort"] = df.apply(lambda r: order.index(tuple(r[cats])), axis=1)
-        else:
-            df["__sort"] = df.apply(lambda r: order.index(r[cats]), axis=1)
-        df = df.sort_values(by="__sort")
+    df = _sort_df(df, cats, order)
 
     if p is None:
         p = bokeh.plotting.figure(**kwargs)
@@ -480,8 +482,11 @@ def histogram(
     legend_orientation="vertical",
     legend_click_policy="hide",
     bins="freedman-diaconis",
-    density=False,
+    density=None,
     style=None,
+    arrangement="stack",
+    mirror=False,
+    hist_height=0.75,
     conf_int=False,
     ptiles=[2.5, 97.5],
     n_bs_reps=10000,
@@ -557,21 +562,33 @@ def histogram(
     rug_height : float, default 0.05
         Height of the rug plot as a fraction of the highest point in the
         histograms.
-    density : bool, default False
+    density : None or bool
         If True, normalize the histograms. Otherwise, base the
-        histograms on counts.
-    style : str, default 'step'
-        The style of histogram to display. Allowed values are 'step' and
-        'step_filled'. `'step_filled'` is only allowed if `conf_int` is
-        False. `'step_filled'` is really only useful when one histogram
-        is being displays, since the fill can obfuscate other
-        histograms.
+        histograms on counts. Must be True for arrangement = 'stack'
+        because there is no absolute scale along the categorical axis.
+        For arrangement = 'overlay', `density` is assumed to be False if
+        None is given.
+    style : None or one of ['step', 'step_filled']
+        Default for overlayed histograms is 'step' and for stacked
+        histograms 'step_filled'. The exception is when `cont_int` is
+        True, in which case `style` must be 'step'.
+    arrangement : 'stack' or 'overlay', default 'stack'
+        Arrangement of histograms. If 'overlay', histograms are overlaid
+        on the same plot. If 'stack', histograms are stacked one on top
+        of the other.
+    mirror : bool, default False
+        If True, reflect the histogram through zero. Ignored if
+        `arrangement == 'overlay'`.
+    hist_height : float, default 0.75
+        Maximal height of histogram of its confidence interval as a
+        fraction of available height along categorical axis. Only active
+        when `arrangement` is 'stack'.
     conf_int : bool, default False
         If True, display confidence interval of ECDF.
     ptiles : list, default [2.5, 97.5]
         The percentiles to use for the confidence interval. Ignored if
         `conf_int` is False.
-    n_bs_reps : int, default 1000
+    n_bs_reps : int, default 10,000
         Number of bootstrap replicates to do to compute confidence
         interval. Ignored if `conf_int` is False.
     line_kwargs : dict
@@ -607,6 +624,9 @@ def histogram(
     fill_kwargs = copy.copy(fill_kwargs)
     rug_kwargs = copy.copy(rug_kwargs)
 
+    if mirror and arrangement == 'overlay':
+        raise RuntimeError("`mirror` must be False if `arrangement == 'overlay'.")
+
     # Check the deprecation of `kind` kwarg (not in utils._parse_deprecations because
     # `kind` is a valid kwarg for ECDFs)
     if kind is not None:
@@ -618,6 +638,30 @@ def histogram(
             f"`kind` is deprecated. Use `style`. Using style='{style}'.",
             DeprecationWarning,
         )
+
+    if style is None:
+        if conf_int:
+            style = 'step'
+        else:
+            if arrangement == 'stack':
+                style = 'step_filled'
+            else:
+                style = 'step'
+
+    if density is None:
+        if arrangement == 'stack':
+            density = True
+        else:
+            density = False
+
+    if arrangement == 'stack':
+        if not density:
+            raise RuntimeError("Must have density = True for 'stack' arrangement.")
+    elif arrangement != 'overlay':
+        raise RuntimeError("Only allowed values for `arrangement` are 'stack' and 'overlay'.")
+
+    if style == 'step_filled' and conf_int:
+        raise RuntimeError("`style` must be 'step' when confidence intervals are displayed.")
 
     if conf_int and style == "step_filled":
         raise RuntimeError(
@@ -648,6 +692,15 @@ def histogram(
         data, q, cats, show_legend, legend_label
     )
 
+    if arrangement == "stack":
+        if show_legend is None:
+            show_legend = False
+
+        if show_legend:
+            warnings.warn(
+                "Cannot show legend with arrangement='stack'. There is no legend to show."
+            )
+
     if show_legend is None:
         if cats is None:
             show_legend = False
@@ -674,8 +727,6 @@ def histogram(
         df, cats, q, None, None, None, palette, order, kwargs
     )
 
-    kwargs = utils._fig_dimensions(kwargs)
-
     if line_kwargs is None:
         line_kwargs = {"line_width": 2}
     if fill_kwargs is None:
@@ -688,12 +739,7 @@ def histogram(
     _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
     cols += ["__label"]
 
-    if order is not None:
-        if type(cats) in [list, tuple]:
-            df["__sort"] = df.apply(lambda r: order.index(tuple(r[cats])), axis=1)
-        else:
-            df["__sort"] = df.apply(lambda r: order.index(r[cats]), axis=1)
-        df = df.sort_values(by="__sort")
+    df = _sort_df(df, cats, order)
 
     if type(bins) == str and bins == "exact":
         a = np.unique(df[q])
@@ -711,6 +757,30 @@ def histogram(
         if np.any(df[q] != np.round(df[q])):
             raise RuntimeError("'integer' bins chosen, but data are not integer.")
         bins = np.arange(df[q].min() - 1, df[q].max() + 1) + 0.5
+
+    if arrangement == "stack":
+        if cats is not None:
+            grouped = df.groupby(cats, sort=False)
+            return _stacked_histograms(
+                df,
+                grouped,
+                q,
+                bins,
+                density,
+                palette,
+                q_axis,
+                order,
+                p,
+                mirror,
+                hist_height,
+                style,
+                conf_int,
+                ptiles,
+                n_bs_reps,
+                line_kwargs,
+                fill_kwargs,
+                kwargs,
+            )
 
     if p is None:
         kwargs = utils._fig_dimensions(kwargs)
@@ -1047,12 +1117,7 @@ def _stacked_ecdfs(
     line_kwargs = copy.copy(line_kwargs)
     fill_kwargs = copy.copy(fill_kwargs)
 
-    if order is not None:
-        if type(cats) in [list, tuple]:
-            df["__sort"] = df.apply(lambda r: order.index(tuple(r[cats])), axis=1)
-        else:
-            df["__sort"] = df.apply(lambda r: order.index(r[cats]), axis=1)
-        df = df.sort_values(by="__sort")
+    df = _sort_df(df, cats, order)
 
     if (
         "frame_width" not in kwargs
@@ -1148,6 +1213,123 @@ def _stacked_ecdfs(
             ps[i].title.text_color = "#696969"
 
         return bokeh.layouts.gridplot(ps, ncols=len(ps))
+
+
+def _stacked_histograms(
+    df,
+    grouped,
+    q,
+    bins,
+    density,
+    palette,
+    q_axis,
+    order,
+    p,
+    mirror,
+    hist_height,
+    style,
+    conf_int,
+    ptiles,
+    n_bs_reps,
+    line_kwargs,
+    fill_kwargs,
+    kwargs,
+):
+    # Protect against mutability and get copies
+    line_kwargs = copy.copy(line_kwargs)
+    fill_kwargs = copy.copy(fill_kwargs)
+
+    line_line_color_supplied = "line_color" in line_kwargs
+    fill_fill_color_supplied = "fill_color" in fill_kwargs
+
+    if p is None:
+        p, _, _ = cat._cat_figure(df, grouped, q, order, None, q_axis, kwargs)
+
+    for i, (name, g) in enumerate(grouped):
+        if not fill_fill_color_supplied:
+            fill_kwargs["fill_color"] = palette[i % len(palette)]
+        if not line_line_color_supplied:
+            line_kwargs["line_color"] = palette[i % len(palette)]
+
+        numerical_bins, e, f = _compute_histogram(
+            g[q].values, bins, density
+        )
+        e0, f0 = _hist_for_plotting(e, f)
+
+        if conf_int:
+            q_vals = g[q].values
+            f_reps = np.empty((n_bs_reps, len(f)))
+            for j in range(n_bs_reps):
+                _, _, f_reps[j, :] = _compute_histogram(
+                    np.random.choice(q_vals, len(q_vals)), numerical_bins, density
+                )
+
+            f_ptiles = np.percentile(f_reps, [2.5, 97.5], axis=0)
+
+            _, f0_low = _hist_for_plotting(e, f_ptiles[0, :])
+            _, f0_high = _hist_for_plotting(e, f_ptiles[1, :])
+
+            # Scale to fit nicely in categorical axes
+            scale = 1.0 / np.max(f0_high) * hist_height / 2
+
+            f0_low_cat = [(name, f0_val) for f0_val in scale * f0_low]
+            f0_high_cat = [(name, f0_val) for f0_val in scale * f0_high]
+
+            if q_axis == "y":
+                p, patch = utils._fill_between(
+                    p, f0_low_cat, e0, f0_high_cat, e0, **fill_kwargs
+                )
+            else:
+                p, patch = utils._fill_between(
+                    p, e0, f0_low_cat, e0, f0_high_cat, **fill_kwargs
+                )
+
+            if mirror:
+                f0_low_cat = [(name, f0_val) for f0_val in -scale * f0_low]
+                f0_high_cat = [(name, f0_val) for f0_val in -scale * f0_high]
+                if q_axis == "y":
+                    p, patch = utils._fill_between(
+                        p, f0_low_cat, e0, f0_high_cat, e0, **fill_kwargs
+                    )
+                else:
+                    p, patch = utils._fill_between(
+                        p, e0, f0_low_cat, e0, f0_high_cat, **fill_kwargs
+                    )
+        else:
+            scale = 1.0 / np.max(f0) * hist_height / 2
+
+        # y-values for histogram, appropriately scaled
+        f0 *= scale
+        f0_cat = [(name, f0_val) for f0_val in f0]
+
+        if mirror:
+            f0_cat += list(reversed([(name, -f0_val) for f0_val in f0]))
+            e0 = np.concatenate((e0, e0[::-1]))
+
+        # Line of histogram
+        if q_axis == "y":
+            p.line(f0_cat, e0, **line_kwargs)
+            if style == "step_filled":
+                p.patch(f0_cat, e0, **fill_kwargs)
+        else:
+            p.line(e0, f0_cat, **line_kwargs)
+            if style == "step_filled":
+                p.patch(e0, f0_cat, **fill_kwargs)
+
+        # Rug plots if we want them. I don't want them now, because it's better to just to striphist.
+        rug = False
+        if rug:
+            xs = [[x, x] for x in data]
+            y0_cat = [(name, 0.05) for _ in range(len(g))]
+
+            if mirror:
+                ys = [(y0, (y0[0], -y0[1])) for y0 in y0_cat]
+            else:
+                ys = [(y0, (y0[0], 0)) for y0 in y0_cat]
+
+            p.multi_line(xs, ys, color=palette[i % len(palette)], **rug_kwargs)
+
+    return p
 
 
 def _ecdf_conf_int(
@@ -1517,6 +1699,17 @@ def _dist_legend(
         p.legend.click_policy = click_policy
 
     return p
+
+
+def _sort_df(df, cats, order):
+    if order is not None and cats is not None:
+        if type(cats) in [list, tuple]:
+            df["__sort"] = df.apply(lambda r: order.index(tuple(r[cats])), axis=1)
+        else:
+            df["__sort"] = df.apply(lambda r: order.index(r[cats]), axis=1)
+        df = df.sort_values(by="__sort")
+
+    return df
 
 
 def _compute_histogram(data, bins, density):

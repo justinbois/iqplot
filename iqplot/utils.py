@@ -28,7 +28,15 @@ def _fig_dimensions(kwargs):
 
 
 def _parse_deprecations(
-    q, q_axis, val, horizontal, horiz_q_axis, click_policy, legend_click_policy, conf_int_kwargs, fill_kwargs
+    q,
+    q_axis,
+    val,
+    horizontal,
+    horiz_q_axis,
+    click_policy,
+    legend_click_policy,
+    conf_int_kwargs,
+    fill_kwargs,
 ):
     if q_axis not in ("x", "y"):
         raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
@@ -66,21 +74,16 @@ def _parse_deprecations(
             f"`click_policy` is deprecated. Use `legend_click_policy`. Using legend_click_policy='{legend_click_policy}'."
         )
 
-
     if conf_int_kwargs is not None:
         if fill_kwargs is None:
             fill_kwargs = copy.copy(conf_int_kwargs)
-            warnings.warn(
-                f"`conf_int_kwargs is deprecated. Use `fill_kwargs`."
-            )
+            warnings.warn(f"`conf_int_kwargs is deprecated. Use `fill_kwargs`.")
         elif conf_int_kwargs != fill_kwargs:
             raise RuntimeError(
                 "`fill_kwargs` and `conf_int_kwargs` in disagreement. Use `fill_kwargs`; `conf_int_kwargs` is deprecated."
             )
 
-        warnings.warn(
-            f"`conf_int_kwargs is deprecated. Use `fill_kwargs`."
-        )
+        warnings.warn(f"`conf_int_kwargs is deprecated. Use `fill_kwargs`.")
 
     return q, legend_click_policy, fill_kwargs
 
@@ -136,9 +139,14 @@ def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
         Plot populated with fill-between.
 
     """
-    patch = p.patch(
-        x=np.concatenate((x1, x2[::-1])), y=np.concatenate((y1, y2[::-1])), **kwargs
-    )
+    x = list(x1) + list(x2)[::-1]
+    y = list(y1) + list(y2)[::-1]
+    patch = p.patch(x=x, y=y, **kwargs)
+
+    # Old way; only works for Numpy arrays
+    # patch = p.patch(
+    #     x=np.concatenate((x1, x2[::-1])), y=np.concatenate((y1, y2[::-1])), **kwargs
+    # )
 
     return p, patch
 
