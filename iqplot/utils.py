@@ -259,6 +259,10 @@ def _check_cat_input(
             if cat not in df.columns:
                 raise RuntimeError(f"{cat} is not a column in the inputted data frame")
     else:
+        if type(cats) == tuple:
+            raise RuntimeError(
+                "Cannot have tuples as data frame column names if there is only one categorical variable."
+            )
         if cats not in df.columns:
             raise RuntimeError(f"{cats} is not a column in the inputted data frame")
 

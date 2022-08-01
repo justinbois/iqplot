@@ -100,8 +100,7 @@ def ecdf(
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
-        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`. Ignored
-        if `style` is 'staircase'.
+        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
     complementary : bool, default False
         If True, plot the empirical complementary cumulative
         distribution function.
@@ -131,7 +130,8 @@ def ecdf(
         'diamond_cross', 'hex', 'inverted_triangle', 'square',
         'square_cross', 'square_x', 'triangle', 'x']
     marker_kwargs : dict
-        Keyword arguments to be passed to `p.circle()`.
+        Keyword arguments to be passed to `p.circle()` or other relevant
+        marker function.
     line_kwargs : dict
         Kwargs to be passed to `p.line()`, `p.ray()`, and `p.segment()`.
     fill_kwargs : dict
@@ -280,7 +280,6 @@ def ecdf(
         fill_kwargs["fill_alpha"] = 0.3
     if "line_alpha" not in fill_kwargs and "line_color" not in fill_kwargs:
         fill_kwargs["line_alpha"] = 0
-    fill_fill_color_supplied = "fill_color" in fill_kwargs
 
     df = data.copy()
 
@@ -306,6 +305,12 @@ def ecdf(
 
     if tooltips is not None:
         p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
+
+    fill_fill_color_supplied = "fill_color" in fill_kwargs
+    marker_fill_color_supplied = "fill_color" in marker_kwargs
+    marker_line_color_supplied = "line_color" in marker_kwargs
+    line_line_color_supplied = "line_color" in line_kwargs
+    fill_fill_color_supplied = "fill_color" in fill_kwargs
 
     markers = []
     lines = []
@@ -336,8 +341,13 @@ def ecdf(
                 )
                 patches.append(patch)
 
-            marker_kwargs["color"] = palette[i % len(palette)]
-            line_kwargs["color"] = palette[i % len(palette)]
+            if not marker_line_color_supplied:
+                marker_kwargs["line_color"] = palette[i % len(palette)]
+            if not marker_fill_color_supplied:
+                marker_kwargs["fill_color"] = palette[i % len(palette)]
+            if not line_line_color_supplied:
+                line_kwargs["line_color"] = palette[i % len(palette)]
+
             if style == "staircase":
                 p, new_line, new_ray_high, new_ray_low = _staircase_ecdf(
                     p,
@@ -351,19 +361,13 @@ def ecdf(
                 rays_low.append(new_ray_low)
 
             if style == "dots":
-                # Put transparent dots for hover purposes
+                if "name" not in marker_kwargs and tooltips is not None:
+                    marker_kwargs["name"] = "hover_glyphs"
+
                 if q_axis == "y":
-                    markers.append(
-                        marker_fun(
-                            source=g, x=y, y=q, name="hover_glyphs", **marker_kwargs
-                        )
-                    )
+                    markers.append(marker_fun(source=g, x=y, y=q, **marker_kwargs))
                 else:
-                    markers.append(
-                        marker_fun(
-                            source=g, x=q, y=y, name="hover_glyphs", **marker_kwargs
-                        )
-                    )
+                    markers.append(marker_fun(source=g, x=q, y=y, **marker_kwargs))
 
             if style == "formal":
                 (
@@ -423,7 +427,7 @@ def ecdf(
 
         if conf_int:
             if "fill_color" not in fill_kwargs:
-                conf_int_kwargs["fill_color"] = "gray"
+                fill_kwargs["fill_color"] = "gray"
 
             p, patch = _ecdf_conf_int(
                 p,
@@ -474,13 +478,14 @@ def histogram(
     order=None,
     q_axis="x",
     p=None,
-    rug=True,
-    rug_height=0.05,
+    rug=None,
+    rug_height=None,
     show_legend=None,
     legend_label=None,
     legend_location="right",
     legend_orientation="vertical",
     legend_click_policy="hide",
+    tooltips=None,
     bins="freedman-diaconis",
     density=None,
     style=None,
@@ -530,6 +535,13 @@ def histogram(
     p : bokeh.plotting.Figure instance, or None (default)
         If None, create a new figure. Otherwise, populate the existing
         figure `p`.
+    rug : bool, default True
+        If True, also include a rug plot. If, however, `bins` is 'exact'
+        or 'integer', the `rug` kwarg is ignored.
+    rug_height : float, default None
+        Height of the rug plot as a fraction of the highest point in the
+        histograms. For 'overlay' arrangement, default is 0.05. For
+        'stacked' arrangement, default is 0.2.
     legend_label : str, default None
         If `cats` is None and `show_legend` is True, then if
         `legend_label` is not None, a legend is created for the glyph
@@ -548,6 +560,11 @@ def histogram(
     legend_click_policy : str, default 'hide'
         Either 'hide', 'mute', or None; how the glyphs respond when the
         corresponding category is clicked in the legend.
+    tooltips : list of 2-tuples
+        Specification for tooltips as per Bokeh specifications. For
+        example, if we want `col1` and `col2` tooltips, we can use
+        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`. Ignored
+        if `rug` is False.
     bins : int, array_like, or str, default 'freedman-diaconis'
         If int or array_like, setting for `bins` kwarg to be passed to
         `np.histogram()`. If 'exact', then each unique value in the
@@ -556,12 +573,6 @@ def histogram(
         square root rule to determine number of bins. If
         `freedman-diaconis`, uses the Freedman-Diaconis rule for number
         of bins.
-    rug : bool, default True
-        If True, also include a rug plot. If, however, `bins` is 'exact'
-        or 'integer', the `rug` kwarg is ignored.
-    rug_height : float, default 0.05
-        Height of the rug plot as a fraction of the highest point in the
-        histograms.
     density : None or bool
         If True, normalize the histograms. Otherwise, base the
         histograms on counts. Must be True for arrangement = 'stack'
@@ -608,6 +619,8 @@ def histogram(
         Deprecated, use `q`.
     click_policy : str, default 'hide'
         Deprecated. Use `legend_click_policy`.
+    conf_int_kwargs : dict
+        Deprecated. Use `fill_kwargs`.
     kind : str, default 'step_filled'
         Deprecated. Use `style`.
     kwargs
@@ -618,14 +631,20 @@ def histogram(
     -------
     output : Bokeh figure
         Figure populated with histograms.
+
+    Notes
+    -----
+    .. Confidence intervals for the histogram are computed using
+       nonparametric bootstrap as follows. The bins are established as
+       per user input via the `bins` kwarg. These bins are fixed for all
+       bootstrap replicates. Then, for each bootstrap sample drawn, the
+       histogram is computed for the bins. The confidence interval is
+       then computed from these bootstrap samples.
     """
     # Protect against mutability of dicts
     line_kwargs = copy.copy(line_kwargs)
     fill_kwargs = copy.copy(fill_kwargs)
     rug_kwargs = copy.copy(rug_kwargs)
-
-    if mirror and arrangement == 'overlay':
-        raise RuntimeError("`mirror` must be False if `arrangement == 'overlay'.")
 
     # Check the deprecation of `kind` kwarg (not in utils._parse_deprecations because
     # `kind` is a valid kwarg for ECDFs)
@@ -641,27 +660,35 @@ def histogram(
 
     if style is None:
         if conf_int:
-            style = 'step'
+            style = "step"
         else:
-            if arrangement == 'stack':
-                style = 'step_filled'
+            if arrangement == "stack":
+                style = "step_filled"
             else:
-                style = 'step'
+                style = "step"
 
     if density is None:
-        if arrangement == 'stack':
+        if arrangement == "stack":
             density = True
         else:
             density = False
 
-    if arrangement == 'stack':
+    if arrangement == "stack":
+        if rug_height is None:
+            rug_height = 0.2
         if not density:
             raise RuntimeError("Must have density = True for 'stack' arrangement.")
-    elif arrangement != 'overlay':
-        raise RuntimeError("Only allowed values for `arrangement` are 'stack' and 'overlay'.")
+    elif arrangement != "overlay":
+        raise RuntimeError(
+            "Only allowed values for `arrangement` are 'stack' and 'overlay'."
+        )
+    elif rug_height is None:
+        rug_height = 0.05
 
-    if style == 'step_filled' and conf_int:
-        raise RuntimeError("`style` must be 'step' when confidence intervals are displayed.")
+    if style == "step_filled" and conf_int:
+        raise RuntimeError(
+            "`style` must be 'step' when confidence intervals are displayed."
+        )
 
     if conf_int and style == "step_filled":
         raise RuntimeError(
@@ -681,7 +708,14 @@ def histogram(
     )
 
     if type(bins) == str and bins in ["integer", "exact"]:
-        rug = False
+        if rug is None:
+            rug = False
+
+        if rug:
+            warnings.warn("Rug plot not generated for integer or exact bins.")
+            rug = False
+    elif rug is None:
+        rug = True
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -727,6 +761,7 @@ def histogram(
         df, cats, q, None, None, None, palette, order, kwargs
     )
 
+    # Defaults for histogram
     if line_kwargs is None:
         line_kwargs = {"line_width": 2}
     if fill_kwargs is None:
@@ -735,6 +770,18 @@ def histogram(
         fill_kwargs["fill_alpha"] = 0.3
     if "line_alpha" not in fill_kwargs:
         fill_kwargs["line_alpha"] = 0
+
+    # Defaults for rug_kwargs
+    if rug_kwargs is None:
+        rug_kwargs = dict(alpha=0.5, line_width=0.5)
+    elif type(rug_kwargs) != dict:
+        raise RuntimeError("`rug_kwargs` must be a dictionary.")
+    if "alpha" not in rug_kwargs and "line_alpha" not in rug_kwargs:
+        rug_kwargs["alpha"] = 0.5
+    if "line_width" not in rug_kwargs:
+        rug_kwargs["line_width"] = 0.5
+    if "name" not in rug_kwargs:
+        rug_kwargs["name"] = "hover_glyphs"
 
     _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
     cols += ["__label"]
@@ -777,8 +824,12 @@ def histogram(
                 conf_int,
                 ptiles,
                 n_bs_reps,
+                rug,
+                rug_height,
+                tooltips,
                 line_kwargs,
                 fill_kwargs,
+                rug_kwargs,
                 kwargs,
             )
 
@@ -867,15 +918,6 @@ def histogram(
 
     # Put in the rug plot
     if rug:
-        if rug_kwargs is None:
-            rug_kwargs = dict(alpha=0.5, line_width=0.5)
-        elif type(rug_kwargs) != dict:
-            raise RuntimeError("`rug_kwargs` must be a dictionary.")
-        if "alpha" not in rug_kwargs and "line_alpha" not in rug_kwargs:
-            rug_kwargs["alpha"] = 0.5
-        if "line_width" not in rug_kwargs:
-            rug_kwargs["line_width"] = 0.5
-
         y = [0, max_height * rug_height]
 
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
@@ -885,10 +927,23 @@ def histogram(
             if q_axis == "y":
                 xs, ys = ys, xs
 
+            cds = bokeh.models.ColumnDataSource(g)
+            cds.data["__xs"] = xs
+            cds.data["__ys"] = ys
+
             if "color" not in rug_kwargs and "line_color" not in rug_kwargs:
-                p.multi_line(xs, ys, color=palette[i % len(palette)], **rug_kwargs)
+                p.multi_line(
+                    source=cds,
+                    xs="__xs",
+                    ys="__ys",
+                    line_color=palette[i % len(palette)],
+                    **rug_kwargs,
+                )
             else:
-                p.multi_line(xs, ys, **rug_kwargs)
+                p.multi_line(source=cds, xs="__xs", ys="__ys", **rug_kwargs)
+
+    if tooltips is not None:
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
 
     return _dist_legend(
         p,
@@ -1148,6 +1203,12 @@ def _stacked_ecdfs(
     line_line_color_supplied = "line_color" in line_kwargs
     fill_fill_color_supplied = "fill_color" in fill_kwargs
 
+    title = kwargs.pop("title", None)
+    if title is not None and q_axis == "y":
+        raise RuntimeError(
+            "`title` is not an allowed kwarg when q_axis is 'y' and `arrangment` is 'stack'."
+        )
+
     for i, (name, g) in enumerate(df.groupby(cats)):
         color = palette[i % len(palette)]
         if not marker_fill_color_supplied:
@@ -1161,6 +1222,10 @@ def _stacked_ecdfs(
 
         if q_axis == "x":
             kwargs["y_axis_label"] = str(name)
+            if i == 0:
+                kwargs["title"] = title
+            else:
+                kwargs["title"] = None
         else:
             kwargs["x_axis_label"] = q
             kwargs["title"] = str(name)
@@ -1231,8 +1296,12 @@ def _stacked_histograms(
     conf_int,
     ptiles,
     n_bs_reps,
+    rug,
+    rug_height,
+    tooltips,
     line_kwargs,
     fill_kwargs,
+    rug_kwargs,
     kwargs,
 ):
     # Protect against mutability and get copies
@@ -1251,9 +1320,7 @@ def _stacked_histograms(
         if not line_line_color_supplied:
             line_kwargs["line_color"] = palette[i % len(palette)]
 
-        numerical_bins, e, f = _compute_histogram(
-            g[q].values, bins, density
-        )
+        numerical_bins, e, f = _compute_histogram(g[q].values, bins, density)
         e0, f0 = _hist_for_plotting(e, f)
 
         if conf_int:
@@ -1272,8 +1339,14 @@ def _stacked_histograms(
             # Scale to fit nicely in categorical axes
             scale = 1.0 / np.max(f0_high) * hist_height / 2
 
-            f0_low_cat = [(name, f0_val) for f0_val in scale * f0_low]
-            f0_high_cat = [(name, f0_val) for f0_val in scale * f0_high]
+            f0_low_cat = [
+                (*name, f0_val) if type(name) == tuple else (name, f0_val)
+                for f0_val in scale * f0_low
+            ]
+            f0_high_cat = [
+                (*name, f0_val) if type(name) == tuple else (name, f0_val)
+                for f0_val in scale * f0_high
+            ]
 
             if q_axis == "y":
                 p, patch = utils._fill_between(
@@ -1285,8 +1358,14 @@ def _stacked_histograms(
                 )
 
             if mirror:
-                f0_low_cat = [(name, f0_val) for f0_val in -scale * f0_low]
-                f0_high_cat = [(name, f0_val) for f0_val in -scale * f0_high]
+                f0_low_cat = [
+                    (*name, f0_val) if type(name) == tuple else (name, f0_val)
+                    for f0_val in -scale * f0_low
+                ]
+                f0_high_cat = [
+                    (*name, f0_val) if type(name) == tuple else (name, f0_val)
+                    for f0_val in -scale * f0_high
+                ]
                 if q_axis == "y":
                     p, patch = utils._fill_between(
                         p, f0_low_cat, e0, f0_high_cat, e0, **fill_kwargs
@@ -1300,10 +1379,19 @@ def _stacked_histograms(
 
         # y-values for histogram, appropriately scaled
         f0 *= scale
-        f0_cat = [(name, f0_val) for f0_val in f0]
+        f0_cat = [
+            (*name, f0_val) if type(name) == tuple else (name, f0_val) for f0_val in f0
+        ]
 
         if mirror:
-            f0_cat += list(reversed([(name, -f0_val) for f0_val in f0]))
+            f0_cat += list(
+                reversed(
+                    [
+                        (*name, -f0_val) if type(name) == tuple else (name, -f0_val)
+                        for f0_val in f0
+                    ]
+                )
+            )
             e0 = np.concatenate((e0, e0[::-1]))
 
         # Line of histogram
@@ -1316,18 +1404,39 @@ def _stacked_histograms(
             if style == "step_filled":
                 p.patch(e0, f0_cat, **fill_kwargs)
 
-        # Rug plots if we want them. I don't want them now, because it's better to just to striphist.
-        rug = False
+        # Add rug, only if not mirrored. Otherwise, use striphistogram().
         if rug:
-            xs = [[x, x] for x in data]
-            y0_cat = [(name, 0.05) for _ in range(len(g))]
+            for i, (name, g) in enumerate(grouped):
+                xs = [[x, x] for x in g[q]]
+                y0_cat = [
+                    (*name, rug_height * hist_height / 2)
+                    if type(name) == tuple
+                    else (name, rug_height * hist_height / 2)
+                    for _ in range(len(g))
+                ]
 
-            if mirror:
-                ys = [(y0, (y0[0], -y0[1])) for y0 in y0_cat]
-            else:
-                ys = [(y0, (y0[0], 0)) for y0 in y0_cat]
+                if mirror:
+                    ys = [(y0, (y0[0], -y0[1])) for y0 in y0_cat]
+                else:
+                    ys = [(y0, (y0[0], 0)) for y0 in y0_cat]
 
-            p.multi_line(xs, ys, color=palette[i % len(palette)], **rug_kwargs)
+                cds = bokeh.models.ColumnDataSource(g)
+                cds.data["__xs"] = xs
+                cds.data["__ys"] = ys
+
+                if "color" not in rug_kwargs and "line_color" not in rug_kwargs:
+                    p.multi_line(
+                        source=cds,
+                        xs="__xs",
+                        ys="__ys",
+                        line_color=palette[i % len(palette)],
+                        **rug_kwargs,
+                    )
+                else:
+                    p.multi_line(source=cds, xs="__xs", ys="__ys", **rug_kwargs)
+
+    if rug and tooltips is not None:
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
 
     return p
 

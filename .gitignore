@@ -2,3 +2,4 @@ build/
 dist/
 iqplot.egg-info/
 sandbox/
+.DS_Store

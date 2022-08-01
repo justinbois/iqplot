@@ -10,6 +10,7 @@ import bokeh.models
 import bokeh.plotting
 
 from . import utils
+from .dist import histogram
 
 
 def strip(
@@ -28,11 +29,13 @@ def strip(
     parcoord_column=None,
     tooltips=None,
     marker="circle",
-    jitter=False,
+    spread=None,
     cat_grid=False,
     marker_kwargs=None,
     jitter_kwargs=None,
+    swarm_kwargs=None,
     parcoord_kwargs=None,
+    jitter=None,
     horizontal=None,
     val=None,
     click_policy=None,
@@ -100,8 +103,10 @@ def strip(
         'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
         'inverted_triangle', 'square', 'square_cross', 'square_x',
         'triangle', 'x']
-    jitter : bool, default False
-        If True, apply a jitter transform to the glyphs.
+    spread : str or None, default None
+        If 'jitter', spread points out using a jitter transform. If
+        'swarm', spread points in beeswarm style. In None or 'none', do
+        not spread.
     cat_grid : bool, default False
         If True, show grid lines for categorical axis.
     marker_kwargs : dict
@@ -114,6 +119,25 @@ def strip(
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
         adjusted to 0.4.
+    swarm_kwargs : dict
+        Keyword arguments for use in generating swarm. Keys with allowed
+        values are:
+
+            - 'corral': Either 'gutter' (default) or 'wrap'. This
+            specifies how points that are moved too far out are dealt
+            with. Using 'gutter', points are overlayed at the maximum
+            allowed distance. Using 'wrap', points are reflected inwards
+            form the maximal extent and possibly overlayed with other
+            points.
+
+            - 'priority': Either 'ascending' (default) or 'descending'.
+            Sort order when determining which points get moved in the
+            y-direction first.
+
+            - marker_pad_px : Gap between markers in units of pixels,
+            default 0.
+    jitter : bool, default False
+        Deprecated, use `spread`.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
@@ -131,11 +155,35 @@ def strip(
     """
     # Protect against mutability of dicts
     jitter_kwargs = copy.copy(jitter_kwargs)
+    swarm_kwargs = copy.copy(swarm_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
 
     q, legend_click_policy, _ = utils._parse_deprecations(
         q, q_axis, val, horizontal, "x", click_policy, legend_click_policy, None, None
     )
+
+    # Hand check jitter deprecation
+    if jitter is not None:
+        if jitter:
+            if spread is None:
+                spread = "jitter"
+                warnings.warn("`jitter` is deprecated. Use spread='jitter'.")
+            if spread == "jitter":
+                warnings.warn("`jitter` is deprecated. Use spread='jitter'.")
+            else:
+                raise RuntimeError(
+                    "`jitter` is deprecated. Use spread='jitter'. `jitter` and `spread` are in conflict."
+                )
+        else:
+            if spread == "jitter":
+                raise RuntimeError(
+                    "`jitter` is deprecated. Use `spread`. `jitter` and `spread` are in conflict."
+                )
+            else:
+                warnings.warn("`jitter` is deprecated. Use spread='jitter'.")
+
+    if spread is not None and spread != 'none' and parcoord_column is not None:
+        raise NotImplementedError("Parallel coordinate plots are not implemented with jitter or swarm spreading.")
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -184,11 +232,24 @@ def strip(
         else:
             jitter_kwargs["width"] = 0.1
 
+    if swarm_kwargs is None:
+        swarm_kwargs = dict(corral="gutter", priority="ascending", marker_pad_px=0)
+    elif type(swarm_kwargs) != dict:
+        raise RuntimeError("`swarm_kwargs` must be a dict.")
+    if "corral" not in swarm_kwargs:
+        swarm_kwargs["corral"] = "gutter"
+    if "priority" not in swarm_kwargs:
+        swarm_kwargs["priority"] = "ascending"
+    if "marker_pad_px" not in swarm_kwargs:
+        swarm_kwargs["marker_pad_px"] = 0
+
     if marker_kwargs is None:
         marker_kwargs = {}
     elif type(marker_kwargs) != dict:
         raise RuntimeError("`marker_kwargs` must be a dict.")
 
+    if "name" not in marker_kwargs:
+        marker_kwargs["name"] = "hover_glyphs"
     if (
         "color" not in marker_kwargs
         and "fill_color" not in marker_kwargs
@@ -202,14 +263,18 @@ def strip(
                 )
                 show_legend = False
         if color_factors == "hex":
-            marker_kwargs["color"] = color_column
+            marker_kwargs["line_color"] = color_column
+            marker_kwargs["fill_color"] = color_column
             if show_legend:
                 warnings.warn(
                     "`color_column` consists of hex colors. No legend will be generated."
                 )
                 show_legend = False
         elif not show_legend:
-            marker_kwargs["color"] = bokeh.transform.factor_cmap(
+            marker_kwargs["fill_color"] = bokeh.transform.factor_cmap(
+                color_column, palette=palette, factors=color_factors
+            )
+            marker_kwargs["line_color"] = bokeh.transform.factor_cmap(
                 color_column, palette=palette, factors=color_factors
             )
 
@@ -218,30 +283,65 @@ def strip(
     marker_fun = utils._get_marker(p, marker)
 
     if marker == "dash":
+        if spread == "swarm":
+            raise RuntimeError(
+                "Cannot have 'swarm' spreading with dash or tick markers."
+            )
         if "angle" not in marker_kwargs and q_axis == "x":
             marker_kwargs["angle"] = np.pi / 2
         if "size" not in marker_kwargs:
             if q_axis == "x":
-                marker_kwargs["size"] = p.plot_height * 0.25 / len(grouped)
+                marker_kwargs["size"] = p.frame_height * 0.25 / len(grouped)
             else:
-                marker_kwargs["size"] = p.plot_width * 0.25 / len(grouped)
+                marker_kwargs["size"] = p.frame_width * 0.25 / len(grouped)
+    else:
+        if "size" not in marker_kwargs:
+            marker_kwargs["size"] = 4
+        if "line_width" not in marker_kwargs:
+            marker_kwargs["line_width"] = 1
 
     source_dict = _cat_source_dict(data, cats, cols, color_column)
 
+    if spread == "swarm":
+        r = (marker_kwargs["size"] + marker_kwargs["line_width"]) / 2
+
+        if q_axis == 'x' and p.x_range.start is not None and p.x_range.end is not None:
+            x_range = [p.x_range.start, p.x_range.end]
+        elif q_axis == 'y' and p.y_range.start is not None and p.y_range.end is not None:
+            x_range = [p.y_range.start, p.y_range.end]
+        else:
+            x_range_width = data[q].max() - data[q].min()
+            x_range = [
+                data[q].min() - 0.05 * x_range_width,
+                data[q].max() + 0.05 * x_range_width,
+            ]
+
+        y_swarm = (
+            grouped[q].transform(_swarm, p, r, x_range, q_axis, **swarm_kwargs).values
+        )
+        source_dict["__y_swarm"] = [
+            (*cat, y_val) if type(cat) == tuple else (cat, y_val)
+            for cat, y_val in zip(source_dict["cat"], y_swarm)
+        ]
+
     if q_axis == "x":
         x = q
-        if jitter:
+        if spread == "jitter":
             jitter_kwargs["range"] = p.y_range
             y = bokeh.transform.jitter("cat", **jitter_kwargs)
+        elif spread == "swarm":
+            y = "__y_swarm"
         else:
             y = "cat"
         if not cat_grid:
             p.ygrid.grid_line_color = None
     else:
         y = q
-        if jitter:
+        if spread == "jitter":
             jitter_kwargs["range"] = p.x_range
             x = bokeh.transform.jitter("cat", **jitter_kwargs)
+        elif spread == "swarm":
+            x = "__y_swarm"
         else:
             x = "cat"
         if not cat_grid:
@@ -267,14 +367,17 @@ def strip(
 
     if color_factors == "hex" or color_column == "cat" or not show_legend:
         marker_fun(
-            source=bokeh.models.ColumnDataSource(source_dict), x=x, y=y, name="hover_glyphs", **marker_kwargs
+            source=bokeh.models.ColumnDataSource(source_dict),
+            x=x,
+            y=y,
+            **marker_kwargs,
         )
     else:
         items = []
         df = pd.DataFrame(source_dict)
         for i, (name, g) in enumerate(df.groupby(color_column)):
             marker_kwargs["color"] = palette[i % len(palette)]
-            mark = marker_fun(source=g, x=x, y=y, name="hover_glyphs", **marker_kwargs)
+            mark = marker_fun(source=g, x=x, y=y, **marker_kwargs)
             items.append((g["__label"].iloc[0], [mark]))
 
         if len(p.legend) == 1:
@@ -667,10 +770,11 @@ def stripbox(
     parcoord_column=None,
     tooltips=None,
     marker="circle",
-    jitter=False,
+    spread=None,
     cat_grid=False,
     marker_kwargs=None,
     jitter_kwargs=None,
+    spread_kwargs=None,
     parcoord_kwargs=None,
     whisker_caps=True,
     display_points=True,
@@ -678,6 +782,7 @@ def stripbox(
     box_kwargs=None,
     median_kwargs=None,
     whisker_kwargs=None,
+    jitter=None,
     horizontal=None,
     val=None,
     click_policy=None,
@@ -751,8 +856,10 @@ def stripbox(
         'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
         'inverted_triangle', 'square', 'square_cross', 'square_x',
         'triangle', 'x']
-    jitter : bool, default False
-        If True, apply a jitter transform to the glyphs.
+    spread : str or None, default None
+        If 'jitter', spread points out using a jitter transform. If
+        'swarm', spread points in beeswarm style. In None or 'none', do
+        not spread.
     cat_grid : bool, default False
         If True, display grid line for categorical axis.
     marker_kwargs : dict
@@ -765,6 +872,23 @@ def stripbox(
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
         adjusted to 0.4.
+    swarm_kwargs : dict
+        Keyword arguments for use in generating swarm. Keys with allowed
+        values are:
+
+            - 'corral': Either 'gutter' (default) or 'wrap'. This
+            specifies how points that are moved too far out are dealt
+            with. Using 'gutter', points are overlayed at the maximum
+            allowed distance. Using 'wrap', points are reflected inwards
+            form the maximal extent and possibly overlayed with other
+            points.
+
+            - 'priority': Either 'ascending' (default) or 'descending'.
+            Sort order when determining which points get moved in the
+            y-direction first.
+
+            - marker_pad_px : Gap between markers in units of pixels,
+            default 0.
     whisker_caps : bool, default True
         If True, put caps on whiskers. If False, omit caps.
     min_data : int, default 5
@@ -780,6 +904,8 @@ def stripbox(
     whisker_kwargs : dict, default None
         A dictionary of kwargs to be passed into `p.segment()`
         when constructing the whiskers for the box plot.
+    jitter : bool, default False
+        Deprecated, use `spread`.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
@@ -800,6 +926,7 @@ def stripbox(
     median_kwargs = copy.copy(median_kwargs)
     whisker_kwargs = copy.copy(whisker_kwargs)
     jitter_kwargs = copy.copy(jitter_kwargs)
+    spread_kwargs = copy.copy(spread_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
     parcoord_kwargs = copy.copy(parcoord_kwargs)
 
@@ -840,11 +967,13 @@ def stripbox(
             parcoord_column=parcoord_column,
             tooltips=tooltips,
             marker=marker,
-            jitter=jitter,
+            spread=spread,
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
+            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
+            jitter=jitter,
             horizontal=horizontal,
             val=val,
             click_policy=click_policy,
@@ -905,11 +1034,13 @@ def stripbox(
             parcoord_column=parcoord_column,
             tooltips=tooltips,
             marker=marker,
-            jitter=jitter,
+            spread=spread,
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
+            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
+            jitter=jitter,
             horizontal=horizontal,
             val=val,
             click_policy=click_policy,
@@ -929,7 +1060,7 @@ def striphistogram(
     palette=None,
     order=None,
     p=None,
-    show_legend=False,
+    show_legend=None,
     legend_location="right",
     legend_orientation="vertical",
     legend_click_policy="hide",
@@ -938,21 +1069,24 @@ def striphistogram(
     parcoord_column=None,
     tooltips=None,
     marker="circle",
-    jitter=False,
-    cat_grid=False,
+    spread=None,
+    cat_grid=True,
     marker_kwargs=None,
     jitter_kwargs=None,
+    spread_kwargs=None,
     parcoord_kwargs=None,
     bins="freedman-diaconis",
-    density=None,
     style=None,
-    mirror=False,
+    mirror=True,
     hist_height=0.75,
     conf_int=False,
     ptiles=[2.5, 97.5],
     n_bs_reps=10000,
     line_kwargs=None,
     fill_kwargs=None,
+    conf_int_kwargs=None,
+    kind=None,
+    jitter=None,
     horizontal=None,
     val=None,
     click_policy=None,
@@ -1028,7 +1162,7 @@ def striphistogram(
         'triangle', 'x']
     jitter : bool, default False
         If True, apply a jitter transform to the glyphs.
-    cat_grid : bool, default False
+    cat_grid : bool, default True
         If True, display grid line for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
@@ -1040,27 +1174,50 @@ def striphistogram(
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
         adjusted to 0.4.
-    whisker_caps : bool, default True
-        If True, put caps on whiskers. If False, omit caps.
-    min_data : int, default 5
-        Minimum number of data points in a given category in order to
-        make a box and whisker. Otherwise, individual data points are
-        plotted as in a strip plot.
-    box_kwargs : dict, default None
-        A dictionary of kwargs to be passed into `p.hbar()` or
-        `p.vbar()` when constructing the boxes for the box plot.
-    median_kwargs : dict, default None
-        A dictionary of kwargs to be passed into `p.hbar()` or
-        `p.vbar()` when constructing the median line for the box plot.
-    whisker_kwargs : dict, default None
-        A dictionary of kwargs to be passed into `p.segment()`
-        when constructing the whiskers for the box plot.
+    bins : int, array_like, or str, default 'freedman-diaconis'
+        If int or array_like, setting for `bins` kwarg to be passed to
+        `np.histogram()`. If 'exact', then each unique value in the
+        data gets its own bin. If 'integer', then integer data is
+        assumed and each integer gets its own bin. If 'sqrt', uses the
+        square root rule to determine number of bins. If
+        `freedman-diaconis`, uses the Freedman-Diaconis rule for number
+        of bins.
+    style : None or one of ['step', 'step_filled']
+        Default for overlayed histograms is 'step' and for stacked
+        histograms 'step_filled'. The exception is when `cont_int` is
+        True, in which case `style` must be 'step'.
+    mirror : bool, default True
+        If True, reflect the histogram through zero.
+    hist_height : float, default 0.75
+        Maximal height of histogram of its confidence interval as a
+        fraction of available height along categorical axis. Only active
+        when `arrangement` is 'stack'.
+    conf_int : bool, default False
+        If True, display confidence interval of ECDF.
+    ptiles : list, default [2.5, 97.5]
+        The percentiles to use for the confidence interval of the
+        histogram. Ignored if `conf_int` is False.
+    n_bs_reps : int, default 10,000
+        Number of bootstrap replicates to do to compute confidence
+        interval of histogram. Ignored if `conf_int` is False.
+    line_kwargs : dict
+        Keyword arguments to pass to `p.line()` in constructing the
+        histograms. By default, {"line_width": 2}.
+    fill_kwargs : dict
+        Keyword arguments to pass to `p.patch()` when making the fill
+        for the step-filled histogram or confidence intervals. Ignored
+        if `style = 'step'` and `conf_int` is False. By default
+        {"fill_alpha": 0.3, "line_alpha": 0}.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
     click_policy : str, default 'hide'
         Deprecated. Use `legend_click_policy`.
+    conf_int_kwargs : dict
+        Deprecated. Use `fill_kwargs`.
+    kind : str, default 'step_filled'
+        Deprecated. Use `style`.
     kwargs
         Any kwargs to be passed to `bokeh.plotting.figure()` when
         instantiating the figure.
@@ -1069,34 +1226,38 @@ def striphistogram(
     -------
     output : bokeh.plotting.Figure instance
         Plot populated with a strip-histogram plot.
+
+    Notes
+    -----
+    .. Histograms are all normalized, as would be the case using the
+       `density=True` kwargs of iqplot.histogram()`. This is necessary
+       because there is no quantitative axis for the height of the
+       histogram in a strip plot.
     """
     # Protect against mutability of dicts
-    box_kwargs = copy.copy(box_kwargs)
-    median_kwargs = copy.copy(median_kwargs)
-    whisker_kwargs = copy.copy(whisker_kwargs)
     jitter_kwargs = copy.copy(jitter_kwargs)
+    spread_kwargs = copy.copy(spread_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
     parcoord_kwargs = copy.copy(parcoord_kwargs)
+    line_kwargs = copy.copy(line_kwargs)
+    fill_kwargs = copy.copy(fill_kwargs)
 
     # Set defaults
-    if box_kwargs is None:
-        box_kwargs = dict(line_color="gray", fill_alpha=0)
-    if "color" not in box_kwargs and "line_color" not in box_kwargs:
-        box_kwargs["line_color"] = "gray"
-    if ("fill_alpha" not in box_kwargs) and ("fill_color" not in box_kwargs):
-        box_kwargs["fill_alpha"] = 0
-    elif ("fill_color" in box_kwargs) and ("fill_alpha" not in box_kwargs):
-        box_kwargs["fill_alpha"] = 0.5
+    if color_column is not None and color_column != cats:
+        if line_kwargs is None:
+            line_kwargs = {}
+        if fill_kwargs is None:
+            fill_kwargs = {}
+        if "color" not in line_kwargs and "line_color" not in line_kwargs:
+            line_kwargs["line_color"] = "gray"
+        if "color" not in fill_kwargs and "fill_color" not in fill_kwargs:
+            fill_kwargs["fill_color"] = "gray"
 
-    if median_kwargs is None:
-        median_kwargs = dict(line_color="gray")
-    if "color" not in box_kwargs and "line_color" not in median_kwargs:
-        median_kwargs["line_color"] = "gray"
-
-    if whisker_kwargs is None:
-        whisker_kwargs = dict(line_color="gray")
-    if "color" not in box_kwargs and "line_color" not in whisker_kwargs:
-        whisker_kwargs["line_color"] = "gray"
+    if style is None:
+        if conf_int:
+            style = "step"
+        else:
+            style = "step_filled"
 
     if top_level == "histogram":
         p = strip(
@@ -1112,17 +1273,20 @@ def striphistogram(
             parcoord_column=parcoord_column,
             tooltips=tooltips,
             marker=marker,
-            jitter=jitter,
+            spread=spread,
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
+            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
+            jitter=jitter,
             horizontal=horizontal,
             val=val,
+            click_policy=click_policy,
             **kwargs,
         )
 
-        p = box(
+        p = histogram(
             data=data,
             q=q,
             cats=cats,
@@ -1130,17 +1294,24 @@ def striphistogram(
             palette=palette,
             order=order,
             p=p,
-            display_points=False,
-            whisker_caps=whisker_caps,
-            min_data=min_data,
-            box_kwargs=box_kwargs,
-            median_kwargs=median_kwargs,
-            whisker_kwargs=whisker_kwargs,
-            horizontal=horizontal,
-            val=val,
+            rug=False,
+            show_legend=False,
+            bins=bins,
+            density=True,
+            style=style,
+            arrangement="stack",
+            mirror=mirror,
+            hist_height=hist_height,
+            conf_int=conf_int,
+            ptiles=ptiles,
+            n_bs_reps=n_bs_reps,
+            line_kwargs=line_kwargs,
+            fill_kwargs=fill_kwargs,
+            conf_int_kwargs=conf_int_kwargs,
+            kind=kind,
         )
     elif top_level == "strip":
-        p = box(
+        p = histogram(
             data=data,
             q=q,
             cats=cats,
@@ -1148,15 +1319,21 @@ def striphistogram(
             palette=palette,
             order=order,
             p=p,
-            display_points=False,
-            cat_grid=cat_grid,
-            whisker_caps=whisker_caps,
-            min_data=min_data,
-            box_kwargs=box_kwargs,
-            median_kwargs=median_kwargs,
-            whisker_kwargs=whisker_kwargs,
-            horizontal=horizontal,
-            val=val,
+            rug=False,
+            show_legend=False,
+            bins=bins,
+            density=True,
+            style=style,
+            arrangement="stack",
+            mirror=mirror,
+            hist_height=hist_height,
+            conf_int=conf_int,
+            ptiles=ptiles,
+            n_bs_reps=n_bs_reps,
+            line_kwargs=line_kwargs,
+            fill_kwargs=fill_kwargs,
+            conf_int_kwargs=conf_int_kwargs,
+            kind=kind,
             **kwargs,
         )
 
@@ -1168,20 +1345,28 @@ def striphistogram(
             palette=palette,
             order=order,
             p=p,
+            cat_grid=cat_grid,
             show_legend=show_legend,
             color_column=color_column,
             parcoord_column=parcoord_column,
             tooltips=tooltips,
             marker=marker,
-            jitter=jitter,
+            spread=spread,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
+            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
+            jitter=jitter,
             horizontal=horizontal,
             val=val,
         )
+
+        if not cat_grid:
+            p.xgrid.grid_line_color = None
     else:
-        raise RuntimeError("Invalid `top_level`. Allowed values are 'box' and 'strip'.")
+        raise RuntimeError(
+            "Invalid `top_level`. Allowed values are 'histogram' and 'strip'."
+        )
 
     return p
 
@@ -1387,3 +1572,166 @@ def _box_source(df, cats, q, cols, min_data):
     )
 
     return source_box, source_outliers
+
+
+def _out_every_interval(y, intervals, epsilon=1e-6):
+    """Check to see if a value `y` list outside every interval in a
+    list of 2-tuples `intervals`."""
+    for interval in intervals:
+        if y > interval[0] + epsilon and y < interval[1] - epsilon:
+            return False
+
+    return True
+
+
+def _swarm_px(
+    x,
+    frame_width,
+    r,
+    x_range,
+    max_y_px=np.inf,
+    corral="gutter",
+    priority="ascending",
+    marker_pad_px=0,
+):
+    """Computes y-coordinates in pixel units for a swarm plot, where x
+    is the quantitative axis.
+
+    Parameters
+    ----------
+    x : array_like
+        Array of values of quantitative varaible.
+    frame_width : int or float
+        Width of plot frame in pixels.
+    r : float
+        Radius of marker, which is typically the (marker size + 1) / 2,
+        where the +1 is due to the standard line width for a marker of
+        one pixel.
+    x_range : list
+        List of length 2, where the first entry is the lower limit of
+        the quantitative axis and the second entry is the upper limit of
+        the quantitative axis.
+    max_y_px : float, default np.inf
+        Maximum allowed displacement. Any points with computed y-values
+        beyond this will be corraled.
+    corral : str, default 'gutter'
+        Either 'gutter' or 'wrap'. How to corral points beyond the
+        maximum displacement.
+    priority : str, either
+        Sort order when determining which points get moved in the
+        y-direction first. Either 'ascending' or 'descending'.
+    marker_pad_px : int of float
+        Gap between markers in units of pixels.
+
+    Returns
+    -------
+    y : array_like
+        Array of y-values in units of pixels.
+    n_overrun : int
+        Number of data points that overrun max_y_px.
+    """
+    # Sort x according to priority
+    if priority == "ascending":
+        inds = [i[0] for i in sorted(enumerate(x), key=lambda x: x[1])]
+    elif priority == "descending":
+        inds = [i[0] for i in sorted(enumerate(x), key=lambda x: -x[1])]
+    elif priority == "random":
+        raise NotImplementedError("'random' priority is not yet implemented.")
+    else:
+        raise NotImplementedError("Custom `priority` not yet implemented.")
+
+    x_pixels = (x[inds] - x_range[0]) * frame_width / (x_range[1] - x_range[0])
+    y_pixels = np.inf * np.ones_like(x_pixels)
+
+    for i in range(len(x_pixels)):
+        intervals = []
+
+        # Scan points to the right
+        for j in range(i + 1, len(x_pixels)):
+            dist = abs(x_pixels[i] - x_pixels[j])
+            if dist > 2 * r:
+                if priority in ["ascending", "descending"]:
+                    break
+                else:
+                    continue
+            if y_pixels[j] < np.inf:
+                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
+                intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
+
+        # Scan points to the left
+        for j in range(i - 1, -1, -1):
+            dist = abs(x_pixels[i] - x_pixels[j])
+            if dist > 2 * r:
+                if priority in ["ascending", "descending"]:
+                    break
+                else:
+                    continue
+            if y_pixels[j] < np.inf:
+                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
+                intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
+
+        # Any y-position must be outside all intervals and should be at the edge of one of the intervals
+        # Need to find first candidate the satisfies this
+        y_cand = 0
+        if len(intervals) > 0:
+            candidates = sorted(np.array(intervals).flatten(), key=abs)
+            for cand in candidates:
+                if _out_every_interval(cand, intervals):
+                    y_cand = cand
+                    break
+        y_pixels[i] = y_cand
+
+    # Clean up points landing too far out
+    n_overrun = 0
+    for i in range(len(x)):
+        if abs(y_pixels[i]) > max_y_px:
+            n_overrun += 1
+            if corral == "gutter":
+                y_pixels[i] = np.sign(y_pixels[i]) * max_y_px
+            elif corral == "wrap":
+                y_pixels[i] = np.sign(y_pixels[i]) * 2 * max_y_px - y_pixels[i]
+
+    # Build output for y in pixels
+    y_out = np.empty_like(x)
+    for i in range(len(x)):
+        y_out[inds[i]] = y_pixels[i]
+
+    return y_out, n_overrun
+
+
+def _swarm(
+    x, p, r, x_range, q_axis, corral="gutter", priority="ascending", marker_pad_px=0
+):
+    if q_axis == "x":
+        extra_padding = 0
+        if type(p.y_range.factors[0]) == tuple:
+            if len(p.y_range.factors[0]) >= 2:
+                extra_padding += p.y_range.group_padding
+            if len(p.y_range.factors[0]) > 2:
+                extra_padding += (len(p.y_range.factors[0]) - 2) * p.y_range.subgroup_padding
+        h = p.frame_height
+        w = p.frame_width
+        n_factors = len(p.y_range.factors) + extra_padding
+    else:
+        extra_padding = 0
+        if type(p.x_range.factors[0]) == tuple:
+            if len(p.x_range.factors[0]) >= 2:
+                extra_padding += p.x_range.group_padding
+            if len(p.x_range.factors[0]) > 2:
+                extra_padding += (len(p.x_range.factors[0]) - 2) * p.x_range.subgroup_padding
+        w = p.frame_height
+        h = p.frame_width
+        n_factors = len(p.x_range.factors) + extra_padding
+
+    max_y_px = h / n_factors / 2 - 2 * r
+    y_pixels, n_overrun = _swarm_px(
+        np.array(x), w, r, x_range, max_y_px=max_y_px, marker_pad_px=marker_pad_px
+    )
+
+    if n_overrun > 0:
+        hw = 'height' if q_axis == 'x' else 'width'
+        warnings.warn(
+            f"{n_overrun} data points exceed maximum {hw}. Consider using spread='jitter' or increasing the frame {hw}."
+        )
+
+    return y_pixels / h * n_factors
