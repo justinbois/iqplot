@@ -971,7 +971,6 @@ def stripbox(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1038,7 +1037,6 @@ def stripbox(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1123,7 +1121,7 @@ def striphistogram(
         If None, create a new figure. Otherwise, populate the existing
         figure `p`.
     top_level : str, default 'strip'
-        If 'box', the box plot is overlaid. If 'strip', the strip plot
+        If 'histogram', the histogram is overlaid. If 'strip', the strip plot
         is overlaid.
     show_legend : bool, default False
         If True, display legend.
@@ -1277,7 +1275,6 @@ def striphistogram(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1354,7 +1351,6 @@ def striphistogram(
             spread=spread,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
