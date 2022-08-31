@@ -118,10 +118,10 @@ def strip(
         not specified, default is
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
-        adjusted to 0.4.
+        adjusted to 0.4. Only active if `spread` is `'jitter'`.
     swarm_kwargs : dict
-        Keyword arguments for use in generating swarm. Keys with allowed
-        values are:
+        Keyword arguments for use in generating swarm. Only active if
+        `spread` is `'swarm'`. Keys with allowed values are:
 
             - 'corral': Either 'gutter' (default) or 'wrap'. This
             specifies how points that are moved too far out are dealt
@@ -136,6 +136,9 @@ def strip(
 
             - marker_pad_px : Gap between markers in units of pixels,
             default 0.
+    parcoord_kwargs : dict
+        Keyword arguments to be passed to `p.line()` when making lines
+        for kwargs. Default is to have one-pixel gray lines.
     jitter : bool, default False
         Deprecated, use `spread`.
     horizontal : bool or None, default None
@@ -182,8 +185,10 @@ def strip(
             else:
                 warnings.warn("`jitter` is deprecated. Use spread='jitter'.")
 
-    if spread is not None and spread != 'none' and parcoord_column is not None:
-        raise NotImplementedError("Parallel coordinate plots are not implemented with jitter or swarm spreading.")
+    if spread is not None and spread != "none" and parcoord_column is not None:
+        raise NotImplementedError(
+            "Parallel coordinate plots are not implemented with jitter or swarm spreading."
+        )
 
     if palette is None:
         palette = colorcet.b_glasbey_category10
@@ -305,9 +310,11 @@ def strip(
     if spread == "swarm":
         r = (marker_kwargs["size"] + marker_kwargs["line_width"]) / 2
 
-        if q_axis == 'x' and p.x_range.start is not None and p.x_range.end is not None:
+        if q_axis == "x" and p.x_range.start is not None and p.x_range.end is not None:
             x_range = [p.x_range.start, p.x_range.end]
-        elif q_axis == 'y' and p.y_range.start is not None and p.y_range.end is not None:
+        elif (
+            q_axis == "y" and p.y_range.start is not None and p.y_range.end is not None
+        ):
             x_range = [p.y_range.start, p.y_range.end]
         else:
             x_range_width = data[q].max() - data[q].min()
@@ -774,7 +781,7 @@ def stripbox(
     cat_grid=False,
     marker_kwargs=None,
     jitter_kwargs=None,
-    spread_kwargs=None,
+    swarm_kwargs=None,
     parcoord_kwargs=None,
     whisker_caps=True,
     display_points=True,
@@ -871,10 +878,10 @@ def stripbox(
         not specified, default is
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
-        adjusted to 0.4.
+        adjusted to 0.4. Only active if `spread` is `'jitter'`.
     swarm_kwargs : dict
-        Keyword arguments for use in generating swarm. Keys with allowed
-        values are:
+        Keyword arguments for use in generating swarm. Only active if
+        `spread` is `'swarm'`. Keys with allowed values are:
 
             - 'corral': Either 'gutter' (default) or 'wrap'. This
             specifies how points that are moved too far out are dealt
@@ -889,6 +896,9 @@ def stripbox(
 
             - marker_pad_px : Gap between markers in units of pixels,
             default 0.
+    parcoord_kwargs : dict
+        Keyword arguments to be passed to `p.line()` when making lines
+        for kwargs. Default is to have one-pixel gray lines.
     whisker_caps : bool, default True
         If True, put caps on whiskers. If False, omit caps.
     min_data : int, default 5
@@ -926,7 +936,7 @@ def stripbox(
     median_kwargs = copy.copy(median_kwargs)
     whisker_kwargs = copy.copy(whisker_kwargs)
     jitter_kwargs = copy.copy(jitter_kwargs)
-    spread_kwargs = copy.copy(spread_kwargs)
+    swarm_kwargs = copy.copy(swarm_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
     parcoord_kwargs = copy.copy(parcoord_kwargs)
 
@@ -971,7 +981,7 @@ def stripbox(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
+            swarm_kwargs=swarm_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1038,7 +1048,7 @@ def stripbox(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
+            swarm_kwargs=swarm_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1073,7 +1083,7 @@ def striphistogram(
     cat_grid=True,
     marker_kwargs=None,
     jitter_kwargs=None,
-    spread_kwargs=None,
+    swarm_kwargs=None,
     parcoord_kwargs=None,
     bins="freedman-diaconis",
     style=None,
@@ -1123,8 +1133,8 @@ def striphistogram(
         If None, create a new figure. Otherwise, populate the existing
         figure `p`.
     top_level : str, default 'strip'
-        If 'box', the box plot is overlaid. If 'strip', the strip plot
-        is overlaid.
+        If 'histogram', the histogram is overlaid. If 'strip', the strip\
+        plot is overlaid.
     show_legend : bool, default False
         If True, display legend.
     legend_location : str, default 'right'
@@ -1173,7 +1183,27 @@ def striphistogram(
         not specified, default is
         `{'distribution': 'normal', 'width': 0.1}`. If the user
         specifies `{'distribution': 'uniform'}`, the `'width'` entry is
-        adjusted to 0.4.
+        adjusted to 0.4. Only active if `spread` is `'jitter'`.
+    swarm_kwargs : dict
+        Keyword arguments for use in generating swarm. Only active if
+        `spread` is `'swarm'`. Keys with allowed values are:
+
+            - 'corral': Either 'gutter' (default) or 'wrap'. This
+            specifies how points that are moved too far out are dealt
+            with. Using 'gutter', points are overlayed at the maximum
+            allowed distance. Using 'wrap', points are reflected inwards
+            form the maximal extent and possibly overlayed with other
+            points.
+
+            - 'priority': Either 'ascending' (default) or 'descending'.
+            Sort order when determining which points get moved in the
+            y-direction first.
+
+            - marker_pad_px : Gap between markers in units of pixels,
+            default 0.
+    parcoord_kwargs : dict
+        Keyword arguments to be passed to `p.line()` when making lines
+        for kwargs. Default is to have one-pixel gray lines.
     bins : int, array_like, or str, default 'freedman-diaconis'
         If int or array_like, setting for `bins` kwarg to be passed to
         `np.histogram()`. If 'exact', then each unique value in the
@@ -1236,7 +1266,7 @@ def striphistogram(
     """
     # Protect against mutability of dicts
     jitter_kwargs = copy.copy(jitter_kwargs)
-    spread_kwargs = copy.copy(spread_kwargs)
+    swarm_kwargs = copy.copy(swarm_kwargs)
     marker_kwargs = copy.copy(marker_kwargs)
     parcoord_kwargs = copy.copy(parcoord_kwargs)
     line_kwargs = copy.copy(line_kwargs)
@@ -1277,7 +1307,7 @@ def striphistogram(
             cat_grid=cat_grid,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
+            swarm_kwargs=swarm_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1354,7 +1384,7 @@ def striphistogram(
             spread=spread,
             marker_kwargs=marker_kwargs,
             jitter_kwargs=jitter_kwargs,
-            spread_kwargs=spread_kwargs,
+            swarm_kwargs=swarm_kwargs,
             parcoord_kwargs=parcoord_kwargs,
             jitter=jitter,
             horizontal=horizontal,
@@ -1655,7 +1685,7 @@ def _swarm_px(
                 else:
                     continue
             if y_pixels[j] < np.inf:
-                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
+                offset = np.sqrt(4 * r ** 2 - dist ** 2) + marker_pad_px
                 intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
 
         # Scan points to the left
@@ -1667,7 +1697,7 @@ def _swarm_px(
                 else:
                     continue
             if y_pixels[j] < np.inf:
-                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
+                offset = np.sqrt(4 * r ** 2 - dist ** 2) + marker_pad_px
                 intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
 
         # Any y-position must be outside all intervals and should be at the edge of one of the intervals
@@ -1708,7 +1738,9 @@ def _swarm(
             if len(p.y_range.factors[0]) >= 2:
                 extra_padding += p.y_range.group_padding
             if len(p.y_range.factors[0]) > 2:
-                extra_padding += (len(p.y_range.factors[0]) - 2) * p.y_range.subgroup_padding
+                extra_padding += (
+                    len(p.y_range.factors[0]) - 2
+                ) * p.y_range.subgroup_padding
         h = p.frame_height
         w = p.frame_width
         n_factors = len(p.y_range.factors) + extra_padding
@@ -1718,18 +1750,27 @@ def _swarm(
             if len(p.x_range.factors[0]) >= 2:
                 extra_padding += p.x_range.group_padding
             if len(p.x_range.factors[0]) > 2:
-                extra_padding += (len(p.x_range.factors[0]) - 2) * p.x_range.subgroup_padding
+                extra_padding += (
+                    len(p.x_range.factors[0]) - 2
+                ) * p.x_range.subgroup_padding
         w = p.frame_height
         h = p.frame_width
         n_factors = len(p.x_range.factors) + extra_padding
 
     max_y_px = h / n_factors / 2 - 2 * r
     y_pixels, n_overrun = _swarm_px(
-        np.array(x), w, r, x_range, max_y_px=max_y_px, marker_pad_px=marker_pad_px
+        np.array(x),
+        w,
+        r,
+        x_range,
+        max_y_px=max_y_px,
+        corral=corral,
+        priority=priority,
+        marker_pad_px=marker_pad_px,
     )
 
     if n_overrun > 0:
-        hw = 'height' if q_axis == 'x' else 'width'
+        hw = "height" if q_axis == "x" else "width"
         warnings.warn(
             f"{n_overrun} data points exceed maximum {hw}. Consider using spread='jitter' or increasing the frame {hw}."
         )
