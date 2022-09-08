@@ -7,6 +7,13 @@ import warnings
 import numpy as np
 import pandas as pd
 
+try:
+    import numba
+
+    njit = numba.njit
+except:
+    njit = utils.dummy_jit
+
 import colorcet
 
 import bokeh.models
@@ -35,7 +42,7 @@ def ecdf(
     style="dots",
     arrangement="overlay",
     conf_int=False,
-    ptiles=[2.5, 97.5],
+    ptiles=(2.5, 97.5),
     n_bs_reps=10000,
     marker="circle",
     marker_kwargs=None,
@@ -117,7 +124,7 @@ def ecdf(
             - formal: Strictly adhere to the definition of an ECDF.
     conf_int : bool, default False
         If True, display confidence interval of ECDF.
-    ptiles : list, default [2.5, 97.5]
+    ptiles : list, default (2.5, 97.5)
         The percentiles to use for the confidence interval. Ignored if
         `conf_int` is False.
     n_bs_reps : int, default 10,000
@@ -160,6 +167,12 @@ def ecdf(
     marker_kwargs = copy.copy(marker_kwargs)
     line_kwargs = copy.copy(line_kwargs)
     fill_kwargs = copy.copy(fill_kwargs)
+
+    if conf_int:
+        if type(ptiles) not in (list, tuple, np.ndarray) and len(ptiles) != 2:
+            raise RuntimeError("`ptiles` must be a list or tuple of length 2.")
+        else:
+            ptiles = np.sort(ptiles)
 
     q, legend_click_policy, fill_kwargs = utils._parse_deprecations(
         q,
@@ -248,6 +261,10 @@ def ecdf(
         marker_kwargs = {}
     if line_kwargs is None:
         line_kwargs = {}
+
+    # Change any kwarg of "color" to line_color and fill_color
+    marker_kwargs = utils._specific_fill_and_color_kwargs(marker_kwargs, "marker")
+    line_kwargs = utils._specific_fill_and_color_kwargs(line_kwargs, "line")
 
     y = "__ECCDF" if complementary else "__ECDF"
 
@@ -487,13 +504,13 @@ def histogram(
     legend_click_policy="hide",
     tooltips=None,
     bins="freedman-diaconis",
-    density=None,
+    density=False,
     style=None,
-    arrangement="stack",
+    arrangement=None,
     mirror=False,
     hist_height=0.75,
     conf_int=False,
-    ptiles=[2.5, 97.5],
+    ptiles=(2.5, 97.5),
     n_bs_reps=10000,
     line_kwargs=None,
     fill_kwargs=None,
@@ -573,29 +590,28 @@ def histogram(
         square root rule to determine number of bins. If
         `freedman-diaconis`, uses the Freedman-Diaconis rule for number
         of bins.
-    density : None or bool
+    density : bool, default False
         If True, normalize the histograms. Otherwise, base the
-        histograms on counts. Must be True for arrangement = 'stack'
-        because there is no absolute scale along the categorical axis.
-        For arrangement = 'overlay', `density` is assumed to be False if
-        None is given.
+        histograms on counts.
     style : None or one of ['step', 'step_filled']
         Default for overlayed histograms is 'step' and for stacked
         histograms 'step_filled'. The exception is when `cont_int` is
         True, in which case `style` must be 'step'.
-    arrangement : 'stack' or 'overlay', default 'stack'
+    arrangement : 'stack' or 'overlay'
         Arrangement of histograms. If 'overlay', histograms are overlaid
         on the same plot. If 'stack', histograms are stacked one on top
-        of the other.
+        of the other. By default, if `cats` is None or there is only one
+        category, `arrangement` is 'overlay', and if there is more than
+        one category, `arrangement` is 'stack'.
     mirror : bool, default False
         If True, reflect the histogram through zero. Ignored if
         `arrangement == 'overlay'`.
     hist_height : float, default 0.75
-        Maximal height of histogram of its confidence interval as a
+        Maximal height of histogram or its confidence interval as a
         fraction of available height along categorical axis. Only active
         when `arrangement` is 'stack'.
     conf_int : bool, default False
-        If True, display confidence interval of ECDF.
+        If True, display confidence interval of histogram.
     ptiles : list, default [2.5, 97.5]
         The percentiles to use for the confidence interval. Ignored if
         `conf_int` is False.
@@ -646,6 +662,12 @@ def histogram(
     fill_kwargs = copy.copy(fill_kwargs)
     rug_kwargs = copy.copy(rug_kwargs)
 
+    if conf_int:
+        if type(ptiles) not in (list, tuple, np.ndarray) and len(ptiles) != 2:
+            raise RuntimeError("`ptiles` must be a list or tuple of length 2.")
+        else:
+            ptiles = np.sort(ptiles)
+
     # Check the deprecation of `kind` kwarg (not in utils._parse_deprecations because
     # `kind` is a valid kwarg for ECDFs)
     if kind is not None:
@@ -658,6 +680,9 @@ def histogram(
             DeprecationWarning,
         )
 
+    if arrangement is None:
+        arrangement = "overlay" if cats is None else "stack"
+
     if style is None:
         if conf_int:
             style = "step"
@@ -667,17 +692,9 @@ def histogram(
             else:
                 style = "step"
 
-    if density is None:
-        if arrangement == "stack":
-            density = True
-        else:
-            density = False
-
     if arrangement == "stack":
         if rug_height is None:
             rug_height = 0.2
-        if not density:
-            raise RuntimeError("Must have density = True for 'stack' arrangement.")
     elif arrangement != "overlay":
         raise RuntimeError(
             "Only allowed values for `arrangement` are 'stack' and 'overlay'."
@@ -773,15 +790,20 @@ def histogram(
 
     # Defaults for rug_kwargs
     if rug_kwargs is None:
-        rug_kwargs = dict(alpha=0.5, line_width=0.5)
+        rug_kwargs = dict(line_alpha=0.5, line_width=0.5)
     elif type(rug_kwargs) != dict:
         raise RuntimeError("`rug_kwargs` must be a dictionary.")
     if "alpha" not in rug_kwargs and "line_alpha" not in rug_kwargs:
-        rug_kwargs["alpha"] = 0.5
+        rug_kwargs["line_alpha"] = 0.5
     if "line_width" not in rug_kwargs:
         rug_kwargs["line_width"] = 0.5
     if "name" not in rug_kwargs:
         rug_kwargs["name"] = "hover_glyphs"
+
+    # Change any kwarg of "color" to line_color and fill_color, same with alpha
+    fill_kwargs = utils._specific_fill_and_color_kwargs(fill_kwargs, "fill")
+    line_kwargs = utils._specific_fill_and_color_kwargs(line_kwargs, "line")
+    rug_kwargs = utils._specific_fill_and_color_kwargs(rug_kwargs, "line")
 
     _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
     cols += ["__label"]
@@ -882,7 +904,7 @@ def histogram(
                     np.random.choice(q_vals, len(q_vals)), numerical_bins, density
                 )
 
-            f_ptiles = np.percentile(f_reps, [2.5, 97.5], axis=0)
+            f_ptiles = np.percentile(f_reps, ptiles, axis=0)
 
             _, f0_low = _hist_for_plotting(e, f_ptiles[0, :])
             _, f0_high = _hist_for_plotting(e, f_ptiles[1, :])
@@ -955,6 +977,448 @@ def histogram(
         [],
         lines,
         patches,
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
+
+
+def spike(
+    data=None,
+    q=None,
+    cats=None,
+    palette=None,
+    order=None,
+    q_axis="x",
+    p=None,
+    show_legend=None,
+    legend_label=None,
+    legend_location="right",
+    legend_orientation="vertical",
+    legend_click_policy="hide",
+    fraction=False,
+    style=None,
+    arrangement=None,
+    spike_height=0.75,
+    conf_int=False,
+    ptiles=(2.5, 97.5),
+    n_bs_reps=10000,
+    line_kwargs=None,
+    marker_kwargs=None,
+    horizontal=None,
+    val=None,
+    click_policy=None,
+    density=None,
+    **kwargs,
+):
+    """
+    Make a spike plot.
+
+    Parameters
+    ----------
+    data : Pandas DataFrame, 1D Numpy array, or xarray
+        DataFrame containing tidy data for plotting.  If a Numpy array,
+        a single category is assumed and a box plot generated from
+        data.
+    q : hashable
+        Name of column to use as quantitative variable if `data` is a
+        Pandas DataFrame. Otherwise, `q` is used as the quantitative
+        axis label.
+    cats : hashable or list of hashables
+        Name of column(s) to use as categorical variable(s).
+    q_axis : str, either 'x' or 'y', default 'x'
+        Axis along which the quantitative value varies.
+    palette : list colors, or single color string
+        If a list, color palette to use. If a single string representing
+        a color, all glyphs are colored with that color. Default is
+        colorcet.b_glasbey_category10 from the colorcet package.
+    order : list or None
+        If not None, must be a list of unique group names when the input
+        data frame is grouped by `cats`. The order of the list specifies
+        the ordering of the categorical variables in the legend. If
+        None, the categories appear in the order in which they appeared
+        in the inputted data frame.
+    p : bokeh.plotting.Figure instance, or None (default)
+        If None, create a new figure. Otherwise, populate the existing
+        figure `p`.
+    legend_label : str, default None
+        If `cats` is None and `show_legend` is True, then if
+        `legend_label` is not None, a legend is created for the glyph
+        on the plot and labeled with `legend_label`. Otherwise, no
+        legend is created if `cats` is None.
+    legend_location : str, default 'right'
+        Location of legend. If one of "right", "left", "above", or
+        "below", the legend is placed outside of the plot area. If one
+        of "top_left", "top_center", "top_right", "center_right",
+        "bottom_right", "bottom_center", "bottom_left", "center_left",
+        or "center", the legend is placed within the plot area. If a
+        2-tuple, legend is placed according to the coordinates in the
+        tuple.
+    legend_orientation : str, default 'vertical'
+        Either 'horizontal' or 'vertical'.
+    legend_click_policy : str, default 'hide'
+        Either 'hide', 'mute', or None; how the glyphs respond when the
+        corresponding category is clicked in the legend.
+    fraction : bool, default False
+        If True, the spike height is given by the fraction of data
+        points having the given value. Otherwise, the height of a spike
+        is given by the count of data points having the given value.
+    style : None or one of ['spike', 'spike-dot', 'dot']
+        'spike' gives a traditional spike plot. 'spike-dot' additionally
+        features dots on top of the spikes, similar in appearance to a
+        lollipop plot. 'dot' has the dot at the top of the spike, but
+        the spike is not shown. Default is 'spike-dot', unless
+        `conf_int` is True and the number of categorial values is
+        greater than one, in which case the default is 'dot' (and only
+        'dot' is allowed) for confidence intervals to avoid clashes.
+    arrangement : 'stack' or 'overlay', default 'stack'
+        Arrangement of spike plots. If 'overlay', spikes are overlaid
+        on the same plot. If 'stack', spikes are stacked one on top
+        of the other.
+    spike_height : float, default 0.75
+        Maximal height of spike or its confidence interval as a
+        fraction of available height along categorical axis. Only active
+        when `arrangement` is 'stack'.
+    conf_int : bool, default False
+        If True, display confidence interval of the spikes.
+    ptiles : list with two elements, default [2.5, 97.5]
+        The percentiles to use for the confidence interval. Ignored if
+        `conf_int` is False.
+    n_bs_reps : int, default 10,000
+        Number of bootstrap replicates to do to compute confidence
+        interval. Ignored if `conf_int` is False.
+    marker_kwargs : dict
+        Keyword arguments to be passed to `p.circle()` for dots at the
+        top of spikes.
+    line_kwargs : dict
+        Keyword arguments to pass to `p.segment()` in constructing the
+        spikes and confidence intervals. By default, {"line_width": 2}.
+    horizontal : bool or None, default None
+        Deprecated. Use `q_axis`.
+    val : hashable
+        Deprecated, use `q`.
+    click_policy : str, default 'hide'
+        Deprecated. Use `legend_click_policy`.
+    kwargs
+        Any kwargs to be passed to `bokeh.plotting.figure()` when making
+        the plot.
+
+    Returns
+    -------
+    output : Bokeh figure
+        Figure populated with histograms.
+
+    Notes
+    -----
+    .. Confidence intervals for the histogram are computed using
+       nonparametric bootstrap as follows. The bins are established as
+       per user input via the `bins` kwarg. These bins are fixed for all
+       bootstrap replicates. Then, for each bootstrap sample drawn, the
+       histogram is computed for the bins. The confidence interval is
+       then computed from these bootstrap samples.
+    """
+    # Protect against mutability of dicts
+    line_kwargs = copy.copy(line_kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+
+    if conf_int:
+        if type(ptiles) not in (list, tuple, np.ndarray) and len(ptiles) != 2:
+            raise RuntimeError("`ptiles` must be a list or tuple of length 2.")
+        else:
+            ptiles = np.sort(ptiles)
+
+    one_cat = cats is None or len(data.groupby(cats)) == 1
+
+    if arrangement is None:
+        arrangement = "overlay" if one_cat else "stack"
+
+    # Use fraction, not density
+    if density is not None:
+        raise RuntimeError("For spike plots, use `fraction`, not `density`.")
+
+    if style is None:
+        if conf_int or (arrangement == "overlay" and not one_cat):
+            style = "dot"
+        else:
+            style = "spike-dot"
+
+    if style not in ["dot", "spike", "spike-dot"]:
+        raise RuntimeError(
+            "Valid values for `style` kwarg are 'dot', 'spike', and 'spike-dot'."
+        )
+
+    if arrangement not in ["stack", "overlay"]:
+        raise RuntimeError(
+            "Only allowed values for `arrangement` are 'stack' and 'overlay'."
+        )
+
+    if "spike" in style and conf_int:
+        raise RuntimeError(
+            "`style` must be 'dot' when confidence intervals are displayed."
+        )
+
+    if arrangement == "overlay" and cats is not None and "dot" not in style:
+        raise RuntimeError(
+            "`style` must be 'dot' or 'spike-dot' for overlay arrangement with more than one category."
+        )
+
+    q, legend_click_policy, _ = utils._parse_deprecations(
+        q,
+        q_axis,
+        val,
+        horizontal,
+        "y",
+        click_policy,
+        legend_click_policy,
+        None,
+        {},
+    )
+
+    if palette is None:
+        palette = colorcet.b_glasbey_category10
+    elif type(palette) == str:
+        palette = [palette]
+
+    df, q, cats, show_legend = utils._data_cats(
+        data, q, cats, show_legend, legend_label
+    )
+
+    if arrangement == "stack":
+        if show_legend is None:
+            show_legend = False
+
+        if show_legend:
+            warnings.warn(
+                "Cannot show legend with arrangement='stack'. There is no legend to show."
+            )
+
+    if show_legend is None:
+        if cats is None:
+            show_legend = False
+        else:
+            show_legend = True
+
+    if cats is None:
+        df["__cat"] = "__dummy_cat"
+        if show_legend:
+            raise RuntimeError("No legend to show if `cats` is None.")
+        if order is not None:
+            raise RuntimeError("No `order` is allowed if `cats` is None.")
+        cats = "__cat"
+
+    cats, cols = utils._check_cat_input(
+        df, cats, q, None, None, None, palette, order, kwargs
+    )
+
+    # Defaults for spikes
+    if line_kwargs is None:
+        line_kwargs = {"line_width": 2}
+
+    # Marker kqargs use Bokeh defaults
+    if marker_kwargs is None:
+        marker_kwargs = {}
+
+    # Change any kwarg of "color" to line_color and fill_color, same with alpha
+    marker_kwargs = utils._specific_fill_and_color_kwargs(marker_kwargs, "marker")
+    line_kwargs = utils._specific_fill_and_color_kwargs(line_kwargs, "line")
+
+    _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
+    cols += ["__label"]
+
+    df = _sort_df(df, cats, order)
+
+    if arrangement == "stack":
+        if cats is not None:
+            grouped = df.groupby(cats, sort=False)
+            return _stacked_spikes(
+                df,
+                grouped,
+                q,
+                palette,
+                q_axis,
+                order,
+                p,
+                spike_height,
+                fraction,
+                style,
+                conf_int,
+                ptiles,
+                n_bs_reps,
+                marker_kwargs,
+                line_kwargs,
+                kwargs,
+            )
+
+    marker_fill_color_supplied = "fill_color" in marker_kwargs
+    marker_line_color_supplied = "line_color" in marker_kwargs
+    line_line_color_supplied = "line_color" in line_kwargs
+
+    if p is None:
+        kwargs = utils._fig_dimensions(kwargs)
+
+        if "x_axis_label" not in kwargs:
+            if q_axis == "y":
+                if fraction:
+                    kwargs["x_axis_label"] = "fraction"
+                else:
+                    kwargs["x_axis_label"] = "count"
+            else:
+                kwargs["x_axis_label"] = q
+
+        if "y_axis_label" not in kwargs:
+            if q_axis == "y":
+                kwargs["y_axis_label"] = q
+            else:
+                if fraction:
+                    kwargs["y_axis_label"] = "fraction"
+                else:
+                    kwargs["y_axis_label"] = "count"
+
+        if q_axis == "y":
+            if "x_range" not in kwargs:
+                kwargs["x_range"] = bokeh.models.DataRange1d(start=0)
+        else:
+            if "y_range" not in kwargs:
+                kwargs["y_range"] = bokeh.models.DataRange1d(start=0)
+
+        p = bokeh.plotting.figure(**kwargs)
+
+    # Explicitly loop enable click policies on the legend (not possible with factors)
+    lines = []
+    markers = []
+    labels = []
+
+    # Confidence intervals
+    if conf_int:
+
+        @njit
+        def _counts(ar, vals, frac):
+            output = np.zeros(len(vals))
+            for a in ar:
+                output[np.searchsorted(vals, a)] += 1.0
+
+            if frac:
+                return output / len(ar)
+            else:
+                return output
+
+        for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
+            x = g[q].values
+            x_unique = np.unique(x)
+
+            bs_reps = [
+                _counts(
+                    np.random.choice(x, replace=True, size=len(x)), x_unique, fraction
+                )
+                for _ in range(n_bs_reps)
+            ]
+
+            conf_ints = np.percentile(bs_reps, ptiles, axis=0)
+
+            df_conf_int = pd.DataFrame(
+                dict(
+                    q=x_unique, __conf_low=conf_ints[0, :], __conf_high=conf_ints[1, :]
+                )
+            )
+
+            if not line_line_color_supplied:
+                line_kwargs["color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                lines.append(
+                    p.segment(
+                        x0="__conf_low",
+                        x1="__conf_high",
+                        y0=q,
+                        y1=q,
+                        source=df_conf_int,
+                        **line_kwargs,
+                    )
+                )
+            else:
+                lines.append(
+                    p.segment(
+                        x0=q,
+                        x1=q,
+                        y0="__conf_low",
+                        y1="__conf_high",
+                        source=df_conf_int,
+                        **line_kwargs,
+                    )
+                )
+            labels.append(g["__label"].iloc[0])
+
+    # Spikes
+    if "spike" in style:
+        for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
+            df_count = (
+                g[q]
+                .value_counts()
+                .reset_index()
+                .rename(columns={"index": q, q: "__count"})
+            )
+
+            if fraction:
+                df_count["__count"] /= df_count["__count"].sum()
+
+            if not line_line_color_supplied:
+                line_kwargs["color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                lines.append(
+                    p.segment(
+                        x0=0, x1="__count", y0=q, y1=q, source=df_count, **line_kwargs
+                    )
+                )
+            else:
+                lines.append(
+                    p.segment(
+                        x0=q, x1=q, y0=0, y1="__count", source=df_count, **line_kwargs
+                    )
+                )
+            labels.append(g["__label"].iloc[0])
+
+    # Overlay dots
+    if "dot" in style:
+        for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
+            df_count = (
+                g[q]
+                .value_counts()
+                .reset_index()
+                .rename(columns={"index": q, q: "__count"})
+            )
+
+            if fraction:
+                df_count["__count"] /= df_count["__count"].sum()
+
+            if not marker_line_color_supplied:
+                marker_kwargs["line_color"] = palette[i % len(palette)]
+            if not marker_fill_color_supplied:
+                marker_kwargs["fill_color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                markers.append(
+                    p.circle(x="__count", y=q, source=df_count, **marker_kwargs)
+                )
+            else:
+                markers.append(
+                    p.circle(x=q, y="__count", source=df_count, **marker_kwargs)
+                )
+
+            labels.append(g["__label"].iloc[0])
+
+    return _dist_legend(
+        p,
+        show_legend,
+        legend_location,
+        legend_orientation,
+        legend_click_policy,
+        labels,
+        markers,
+        lines,
+        [],
         [],
         [],
         [],
@@ -1152,7 +1616,7 @@ def _stacked_ecdfs(
     kind="collection",
     style="dots",
     conf_int=False,
-    ptiles=[2.5, 97.5],
+    ptiles=(2.5, 97.5),
     n_bs_reps=10000,
     marker="circle",
     marker_kwargs=None,
@@ -1314,14 +1778,16 @@ def _stacked_histograms(
     if p is None:
         p, _, _ = cat._cat_figure(df, grouped, q, order, None, q_axis, kwargs)
 
+    f0_max = 0.0
+    plot_data = {}
     for i, (name, g) in enumerate(grouped):
-        if not fill_fill_color_supplied:
-            fill_kwargs["fill_color"] = palette[i % len(palette)]
-        if not line_line_color_supplied:
-            line_kwargs["line_color"] = palette[i % len(palette)]
-
         numerical_bins, e, f = _compute_histogram(g[q].values, bins, density)
         e0, f0 = _hist_for_plotting(e, f)
+
+        plot_data[name] = dict(e0=e0, f0=f0)
+
+        # Record f0_max
+        f0_max = max(f0_max, f0.max())
 
         if conf_int:
             q_vals = g[q].values
@@ -1331,54 +1797,92 @@ def _stacked_histograms(
                     np.random.choice(q_vals, len(q_vals)), numerical_bins, density
                 )
 
-            f_ptiles = np.percentile(f_reps, [2.5, 97.5], axis=0)
+            f_ptiles = np.percentile(f_reps, ptiles, axis=0)
 
             _, f0_low = _hist_for_plotting(e, f_ptiles[0, :])
             _, f0_high = _hist_for_plotting(e, f_ptiles[1, :])
 
-            # Scale to fit nicely in categorical axes
-            scale = 1.0 / np.max(f0_high) * hist_height / 2
+            # Store the plot data
+            plot_data[name]["f0_low"] = f0_low
+            plot_data[name]["f0_high"] = f0_high
 
+            # Record max f0
+            f0_max = max(f0_max, f0_high.max())
+
+    if not density:
+        scale = 1.0 / f0_max * hist_height / 2
+
+    for i, (name, plot_data_dict) in enumerate(plot_data.items()):
+        if not fill_fill_color_supplied:
+            fill_kwargs["fill_color"] = palette[i % len(palette)]
+        if not line_line_color_supplied:
+            line_kwargs["line_color"] = palette[i % len(palette)]
+
+        if density:
+            if conf_int:
+                scale = 1.0 / plot_data_dict["f0_high"].max() * hist_height / 2
+            else:
+                scale = 1.0 / plot_data_dict["f0"].max() * hist_height / 2
+
+        if conf_int:
             f0_low_cat = [
                 (*name, f0_val) if type(name) == tuple else (name, f0_val)
-                for f0_val in scale * f0_low
+                for f0_val in scale * plot_data_dict["f0_low"]
             ]
             f0_high_cat = [
                 (*name, f0_val) if type(name) == tuple else (name, f0_val)
-                for f0_val in scale * f0_high
+                for f0_val in scale * plot_data_dict["f0_high"]
             ]
 
             if q_axis == "y":
                 p, patch = utils._fill_between(
-                    p, f0_low_cat, e0, f0_high_cat, e0, **fill_kwargs
+                    p,
+                    f0_low_cat,
+                    plot_data_dict["e0"],
+                    f0_high_cat,
+                    plot_data_dict["e0"],
+                    **fill_kwargs,
                 )
             else:
                 p, patch = utils._fill_between(
-                    p, e0, f0_low_cat, e0, f0_high_cat, **fill_kwargs
+                    p,
+                    plot_data_dict["e0"],
+                    f0_low_cat,
+                    plot_data_dict["e0"],
+                    f0_high_cat,
+                    **fill_kwargs,
                 )
 
             if mirror:
                 f0_low_cat = [
                     (*name, f0_val) if type(name) == tuple else (name, f0_val)
-                    for f0_val in -scale * f0_low
+                    for f0_val in -scale * plot_data_dict["f0_low"]
                 ]
                 f0_high_cat = [
                     (*name, f0_val) if type(name) == tuple else (name, f0_val)
-                    for f0_val in -scale * f0_high
+                    for f0_val in -scale * plot_data_dict["f0_high"]
                 ]
                 if q_axis == "y":
                     p, patch = utils._fill_between(
-                        p, f0_low_cat, e0, f0_high_cat, e0, **fill_kwargs
+                        p,
+                        f0_low_cat,
+                        plot_data_dict["e0"],
+                        f0_high_cat,
+                        plot_data_dict["e0"],
+                        **fill_kwargs,
                     )
                 else:
                     p, patch = utils._fill_between(
-                        p, e0, f0_low_cat, e0, f0_high_cat, **fill_kwargs
+                        p,
+                        plot_data_dict["e0"],
+                        f0_low_cat,
+                        plot_data_dict["e0"],
+                        f0_high_cat,
+                        **fill_kwargs,
                     )
-        else:
-            scale = 1.0 / np.max(f0) * hist_height / 2
 
         # y-values for histogram, appropriately scaled
-        f0 *= scale
+        f0 = plot_data_dict["f0"] * scale
         f0_cat = [
             (*name, f0_val) if type(name) == tuple else (name, f0_val) for f0_val in f0
         ]
@@ -1392,7 +1896,9 @@ def _stacked_histograms(
                     ]
                 )
             )
-            e0 = np.concatenate((e0, e0[::-1]))
+            e0 = np.concatenate((plot_data_dict["e0"], plot_data_dict["e0"][::-1]))
+        else:
+            e0 = plot_data_dict["e0"]
 
         # Line of histogram
         if q_axis == "y":
@@ -1404,7 +1910,7 @@ def _stacked_histograms(
             if style == "step_filled":
                 p.patch(e0, f0_cat, **fill_kwargs)
 
-        # Add rug, only if not mirrored. Otherwise, use striphistogram().
+        # Add rug
         if rug:
             for i, (name, g) in enumerate(grouped):
                 xs = [[x, x] for x in g[q]]
@@ -1416,9 +1922,9 @@ def _stacked_histograms(
                 ]
 
                 if mirror:
-                    ys = [(y0, (y0[0], -y0[1])) for y0 in y0_cat]
+                    ys = [(y0, y0[:-1] + (-y0[-1],)) for y0 in y0_cat]
                 else:
-                    ys = [(y0, (y0[0], 0)) for y0 in y0_cat]
+                    ys = [(y0, y0[:-1] + (0,)) for y0 in y0_cat]
 
                 cds = bokeh.models.ColumnDataSource(g)
                 cds.data["__xs"] = xs
@@ -1441,13 +1947,194 @@ def _stacked_histograms(
     return p
 
 
+def _stacked_spikes(
+    df,
+    grouped,
+    q,
+    palette,
+    q_axis,
+    order,
+    p,
+    spike_height,
+    fraction,
+    style,
+    conf_int,
+    ptiles,
+    n_bs_reps,
+    marker_kwargs,
+    line_kwargs,
+    kwargs,
+):
+    # Protect against mutability and get copies
+    line_kwargs = copy.copy(line_kwargs)
+    marker_kwargs = copy.copy(marker_kwargs)
+
+    line_line_color_supplied = "line_color" in line_kwargs
+    marker_fill_color_supplied = "fill_color" in marker_kwargs
+    marker_line_color_supplied = "line_color" in marker_kwargs
+
+    if p is None:
+        p, _, _ = cat._cat_figure(df, grouped, q, order, None, q_axis, kwargs)
+
+    # Compute confidence intervals, keeping track of maximum possible spike height
+    if conf_int:
+
+        @njit
+        def _counts(ar, vals, frac):
+            output = np.zeros(len(vals))
+            for a in ar:
+                output[np.searchsorted(vals, a)] += 1.0
+
+            if frac:
+                return output / len(ar)
+            else:
+                return output
+
+        conf_ints_dict = dict()
+        max_spike = 0
+        for i, (name, g) in enumerate(grouped):
+            x = g[q].values
+            x_unique = np.unique(x)
+
+            bs_reps = [
+                _counts(
+                    np.random.choice(x, replace=True, size=len(x)), x_unique, fraction
+                )
+                for _ in range(n_bs_reps)
+            ]
+
+            conf_ints = np.percentile(bs_reps, ptiles, axis=0)
+
+            if not fraction:
+                max_spike = max(max_spike, conf_ints.max())
+
+            conf_ints_dict[name] = pd.DataFrame(
+                {
+                    q: x_unique,
+                    "__conf_low": conf_ints[0, :],
+                    "__conf_high": conf_ints[1, :],
+                }
+            )
+    elif not fraction:
+        counts = grouped[q].value_counts().rename("__count").reset_index()
+        max_spike = counts["__count"].max()
+
+    if not fraction:
+        scale = 1.0 / max_spike * spike_height / 2
+
+    for i, (name, g) in enumerate(grouped):
+        # Confidence intervals
+        if conf_int:
+            if fraction:
+                scale = (
+                    1.0 / conf_ints_dict[name]["__conf_high"].max() * spike_height / 2
+                )
+
+            conf_ints_dict[name]["__conf_cat_low"] = [
+                (*name, val) if type(name) == tuple else (name, val)
+                for val in scale * conf_ints_dict[name]["__conf_low"]
+            ]
+
+            conf_ints_dict[name]["__conf_cat_high"] = [
+                (*name, val) if type(name) == tuple else (name, val)
+                for val in scale * conf_ints_dict[name]["__conf_high"]
+            ]
+
+            if not line_line_color_supplied:
+                line_kwargs["color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                p.segment(
+                    x0="__conf_cat_low",
+                    x1="__conf_cat_high",
+                    y0=q,
+                    y1=q,
+                    source=conf_ints_dict[name],
+                    **line_kwargs,
+                )
+            else:
+                p.segment(
+                    x0=q,
+                    x1=q,
+                    y0="__conf_cat_low",
+                    y1="__conf_cat_high",
+                    source=conf_ints_dict[name],
+                    **line_kwargs,
+                )
+
+        # Make a count data frame for spikes and dots
+        df_count = (
+            g[q].value_counts().reset_index().rename(columns={"index": q, q: "__count"})
+        )
+
+        # For now, enforce fraction
+        if fraction:
+            df_count["__count"] /= df_count["__count"].sum()
+
+        # Scaling to fit properly with counting
+        if not conf_int and fraction:
+            scale = 1.0 / np.max(df_count["__count"]) * spike_height / 2
+
+        # Compute counts with the categorical value included
+        df_count["__count_cat"] = [
+            (*name, val) if type(name) == tuple else (name, val)
+            for val in scale * df_count["__count"]
+        ]
+
+        # Spikes
+        if "spike" in style:
+            df_count["__count_cat_base"] = [
+                (*name, 0) if type(name) == tuple else (name, 0)
+                for _ in df_count["__count"]
+            ]
+
+            if not line_line_color_supplied:
+                line_kwargs["color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                p.segment(
+                    x0="__count_cat_base",
+                    x1="__count_cat",
+                    y0=q,
+                    y1=q,
+                    source=df_count,
+                    **line_kwargs,
+                )
+            else:
+                p.segment(
+                    x0=q,
+                    x1=q,
+                    y0="__count_cat_base",
+                    y1="__count_cat",
+                    source=df_count,
+                    **line_kwargs,
+                )
+
+        # Overlay dots
+        if "dot" in style:
+            if not line_line_color_supplied:
+                line_kwargs["color"] = palette[i % len(palette)]
+
+            if not marker_line_color_supplied:
+                marker_kwargs["line_color"] = palette[i % len(palette)]
+            if not marker_fill_color_supplied:
+                marker_kwargs["fill_color"] = palette[i % len(palette)]
+
+            if q_axis == "y":
+                p.circle(x="__count_cat", y=q, source=df_count, **marker_kwargs)
+            else:
+                p.circle(x=q, y="__count_cat", source=df_count, **marker_kwargs)
+
+    return p
+
+
 def _ecdf_conf_int(
     p,
     data,
     complementary=False,
     q_axis="x",
     n_bs_reps=10000,
-    ptiles=[2.5, 97.5],
+    ptiles=(2.5, 97.5),
     **kwargs,
 ):
     """Add an ECDF confidence interval to a plot.
@@ -1578,7 +2265,7 @@ def _dist_legend(
     circles_low,
     invisible_markers,
 ):
-    """Add a legend to a histogram or ECDF plot."""
+    """Add a legend to a histogram, spike, or ECDF plot."""
     if show_legend:
         if len(markers) > 0:
             if len(lines) > 0:
@@ -1658,6 +2345,21 @@ def _dist_legend(
                                 circles_high,
                                 circles_low,
                                 invisible_markers,
+                                markers,
+                            )
+                        ]
+                    elif not rays_high:
+                        items = [
+                            (
+                                label,
+                                [
+                                    line,
+                                    marker,
+                                ],
+                            )
+                            for label, line, marker in zip(
+                                labels,
+                                lines,
                                 markers,
                             )
                         ]

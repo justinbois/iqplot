@@ -311,6 +311,37 @@ def _check_cat_input(
     return cats, cols
 
 
+def _specific_fill_and_color_kwargs(kwargs, kwarg_type):
+    if "color" in kwargs:
+        if "fill_color" in kwargs or "line_color" in kwargs:
+            raise RuntimeError(
+                "Specifing both color and fill_color or line_color in a set of kwargs is ambiguous."
+            )
+
+        kwargs["line_color"] = kwargs["color"]
+
+        if kwarg_type != "line":
+            kwargs["fill_color"] = kwargs["color"]
+
+        del kwargs["color"]
+
+    if "alpha" in kwargs:
+        if "fill_alpha" in kwargs or "line_alpha" in kwargs:
+            raise RuntimeError(
+                "Specifing both alpha and fill_alpha or line_alpha in a set of kwargs is ambiguous."
+            )
+
+        if kwarg_type != "fill":
+            kwargs["line_alpha"] = kwargs["alpha"]
+
+        if kwarg_type != "line":
+            kwargs["fill_alpha"] = kwargs["alpha"]
+
+        del kwargs["alpha"]
+
+    return kwargs
+
+
 def _convert_data(data, inf_ok=False, min_len=1):
     """
     Convert inputted 1D data set into NumPy array of floats.
@@ -355,3 +386,27 @@ def _convert_data(data, inf_ok=False, min_len=1):
         )
 
     return data
+
+
+def _dummy_jit(*args, **kwargs):
+    """Dummy wrapper for jitting if numba not applicable."""
+
+    def wrapper(f):
+        return f
+
+    def marker(*args, **kwargs):
+        return marker
+
+    if (
+        len(args) > 0
+        and (args[0] is marker or not callable(args[0]))
+        or len(kwargs) > 0
+    ):
+        # @jit(int32(int32, int32)), @jit(signature="void(int32)")
+        return wrapper
+    elif len(args) == 0:
+        # @jit()
+        return wrapper
+    else:
+        # @jit
+        return args[0]

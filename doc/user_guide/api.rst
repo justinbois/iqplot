@@ -12,6 +12,7 @@ API Reference
    box
    strip
    stripbox
-   striphistogram
+   spike
    histogram
+   striphistogram
    ecdf

@@ -586,10 +586,7 @@ def box(
             box_kwargs["line_color"] = None
 
     if whisker_kwargs is None:
-        if "fill_color" in box_kwargs:
-            whisker_kwargs = {"line_color": box_kwargs["fill_color"]}
-        else:
-            whisker_kwargs = {"line_color": "black"}
+        whisker_kwargs = {"line_color": "black"}
     elif type(whisker_kwargs) != dict:
         raise RuntimeError("`whisker_kwargs` must be a dict.")
 
@@ -1090,7 +1087,7 @@ def striphistogram(
     mirror=True,
     hist_height=0.75,
     conf_int=False,
-    ptiles=[2.5, 97.5],
+    ptiles=(2.5, 97.5),
     n_bs_reps=10000,
     line_kwargs=None,
     fill_kwargs=None,
@@ -1224,7 +1221,7 @@ def striphistogram(
         when `arrangement` is 'stack'.
     conf_int : bool, default False
         If True, display confidence interval of ECDF.
-    ptiles : list, default [2.5, 97.5]
+    ptiles : list, default (2.5, 97.5)
         The percentiles to use for the confidence interval of the
         histogram. Ignored if `conf_int` is False.
     n_bs_reps : int, default 10,000
