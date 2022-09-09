@@ -241,19 +241,20 @@ def ecdf(
 
     kwargs = utils._fig_dimensions(kwargs)
 
-    if conf_int and "y_axis_type" in kwargs and kwargs["y_axis_type"] == "log":
+    non_q_axis = "y" if q_axis == "x" else "x"
+    if conf_int and f"{non_q_axis}_axis_type" in kwargs and kwargs[f"{non_q_axis}_axis_type"] == "log":
         warnings.warn(
-            "Cannot reliably draw confidence intervals with a y-axis on a log scale because zero cannot be represented. Omitting confidence interval."
+            f"Cannot reliably draw confidence intervals with a {non_q_axis}-axis on a log scale because zero cannot be represented. Omitting confidence interval."
         )
         conf_int = False
     if (
         conf_int
-        and "x_axis_type" in kwargs
-        and kwargs["x_axis_type"] == "log"
+        and f"{q_axis}_axis_type" in kwargs
+        and kwargs[f"{q_axis}_axis_type"] == "log"
         and (data[q] <= 0).any()
     ):
         warnings.warn(
-            "Cannot draw confidence intervals with a x-axis on a log scale because some values are negative. Any negative values will be omitted from the ECDF."
+            f"Cannot draw confidence intervals with a {q_axis}-axis on a log scale because some values are negative. Any negative values will be omitted from the ECDF."
         )
         conf_int = False
 
