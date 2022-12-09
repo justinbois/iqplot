@@ -7,13 +7,6 @@ import warnings
 import numpy as np
 import pandas as pd
 
-try:
-    import numba
-
-    njit = numba.njit
-except:
-    njit = utils.dummy_jit
-
 import colorcet
 
 import bokeh.models
@@ -21,6 +14,13 @@ import bokeh.plotting
 
 from . import utils
 from . import cat
+
+try:
+    import numba
+
+    njit = numba.njit
+except:
+    njit = utils._dummy_jit
 
 
 def ecdf(
