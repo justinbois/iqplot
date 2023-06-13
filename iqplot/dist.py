@@ -234,6 +234,7 @@ def ecdf(
     data, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
     )
+    order = utils._order_to_str(order)
 
     cats, cols = utils._check_cat_input(
         data, cats, q, None, None, tooltips, palette, order, marker_kwargs
@@ -743,6 +744,7 @@ def histogram(
     df, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
     )
+    order = utils._order_to_str(order)
 
     if arrangement == "stack":
         if show_legend is None:
@@ -1185,6 +1187,7 @@ def spike(
     df, q, cats, show_legend = utils._data_cats(
         data, q, cats, show_legend, legend_label
     )
+    order = utils._order_to_str(order)
 
     if arrangement == "stack":
         if show_legend is None:

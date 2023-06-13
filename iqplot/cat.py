@@ -200,6 +200,7 @@ def strip(
             show_legend = not _color_column_hexcodes(data, color_column)
 
     data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend, None)
+    order = utils._order_to_str(order)
 
     cats, cols = utils._check_cat_input(
         data, cats, q, color_column, parcoord_column, tooltips, palette, order, kwargs
@@ -310,25 +311,23 @@ def strip(
     if spread == "swarm":
         r = (marker_kwargs["size"] + marker_kwargs["line_width"]) / 2
 
-        if q_axis == "x" and p.x_range.start is not None and p.x_range.end is not None:
-            x_range = [p.x_range.start, p.x_range.end]
-        elif (
-            q_axis == "y" and p.y_range.start is not None and p.y_range.end is not None
-        ):
-            x_range = [p.y_range.start, p.y_range.end]
+        if q_axis == "x" and np.all(utils._range_specified(p.x_range)):
+            q_range = [p.x_range.start, p.x_range.end]
+        elif q_axis == "y" and np.all(utils._range_specified(p.y_range)):
+            q_range = [p.y_range.start, p.y_range.end]
         else:
-            x_range_width = data[q].max() - data[q].min()
-            x_range = [
-                data[q].min() - 0.05 * x_range_width,
-                data[q].max() + 0.05 * x_range_width,
+            q_range_width = data[q].max() - data[q].min()
+            q_range = [
+                data[q].min() - 0.05 * q_range_width,
+                data[q].max() + 0.05 * q_range_width,
             ]
 
-        y_swarm = (
-            grouped[q].transform(_swarm, p, r, x_range, q_axis, **swarm_kwargs).values
+        swarm_transform = (
+            grouped[q].transform(_swarm, p, r, q_range, q_axis, **swarm_kwargs).values
         )
-        source_dict["__y_swarm"] = [
+        source_dict["__swarm"] = [
             (*cat, y_val) if type(cat) == tuple else (cat, y_val)
-            for cat, y_val in zip(source_dict["cat"], y_swarm)
+            for cat, y_val in zip(source_dict["cat"], swarm_transform)
         ]
 
     if q_axis == "x":
@@ -337,7 +336,7 @@ def strip(
             jitter_kwargs["range"] = p.y_range
             y = bokeh.transform.jitter("cat", **jitter_kwargs)
         elif spread == "swarm":
-            y = "__y_swarm"
+            y = "__swarm"
         else:
             y = "cat"
         if not cat_grid:
@@ -348,7 +347,7 @@ def strip(
             jitter_kwargs["range"] = p.x_range
             x = bokeh.transform.jitter("cat", **jitter_kwargs)
         elif spread == "swarm":
-            x = "__y_swarm"
+            x = "__swarm"
         else:
             x = "cat"
         if not cat_grid:
@@ -565,6 +564,7 @@ def box(
         palette = colorcet.b_glasbey_category10
 
     data, q, cats, _ = utils._data_cats(data, q, cats, False, None)
+    order = utils._order_to_str(order)
 
     cats, cols = utils._check_cat_input(
         data, cats, q, None, None, None, palette, order, box_kwargs

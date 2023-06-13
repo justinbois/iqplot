@@ -103,8 +103,10 @@ def _data_cats(data, q, cats, show_legend, legend_label):
         if cats is not None:
             raise RuntimeError("If `data` is a Numpy array, `cats` must be None.")
 
+    # Make a copy of the data frame
+    data = data.copy()
+
     if cats is None:
-        data = data.copy()
         if legend_label is None:
             data["__dummy_cat"] = " "
             show_legend = False
@@ -112,7 +114,30 @@ def _data_cats(data, q, cats, show_legend, legend_label):
             data["__dummy_cat"] = legend_label
         cats = "__dummy_cat"
 
+    # Ensure categorical columns are have data type str
+    if type(cats) == str:
+        data.loc[:, cats] = data.loc[:, cats].astype(str)
+    else:
+        for cat in cats:
+            data.loc[:, cat] = data.loc[:, cat].astype(str)
+
     return data, q, cats, show_legend
+
+
+def _order_to_str(order):
+    """Convert entries in `order` to strings"""
+    if order is None:
+        return order
+
+    order = list(order)
+
+    for i, item in enumerate(order):
+        if type(item) not in [list, tuple, np.ndarray]:
+            order[i] = str(order[i])
+        else:
+            order[i] = (str(x) for x in item)
+
+    return order
 
 
 def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
@@ -289,12 +314,11 @@ def _check_cat_input(
         grouped = df.groupby(cats)
         if grouped.ngroups > len(order):
             raise RuntimeError(
-                "`order` must have at least as many elements as the number of unique groups in `cats`."
-            )
+                "`order` must have at least as many elements as the number of unique groups in `cats`.")
         for entry in order:
             if entry not in grouped.groups.keys():
                 raise RuntimeError(
-                    f"Entry {entry} in grouping of input data but not present in as a group in the inputted data."
+                    f"Entry {entry} in `order` but not present as a group in the inputted data."
                 )
 
     if parcoord_column is not None:
@@ -386,6 +410,34 @@ def _convert_data(data, inf_ok=False, min_len=1):
         )
 
     return data
+
+
+def _edge_value_given(p_edge_value):
+
+    ret_val = True
+
+    if p_edge_value is None:
+         ret_val = False
+    else:
+        try:
+            if np.isnan(p_edge_value):
+                ret_val = False
+            else:
+                ret_val = True
+        except:
+            ret_val = True
+
+    return ret_val
+
+
+def _range_specified(axis_range):
+    """
+    Missing x_range and y_range start and end values are None in
+    Bokeh 2.x and np.nan in Bokeh 3.x. This checks to see if the start
+    and end attributes of a Range1d instance are None or nan and returns
+    True is not.
+    """
+    return _edge_value_given(axis_range.start), _edge_value_given(axis_range.end)
 
 
 def _dummy_jit(*args, **kwargs):
