@@ -20,9 +20,11 @@ iqplot has the following dependencies.
 - Bokeh_
 - colorcet_
 
+Numba_ is suggested but not required.
 
 .. _NumPy: http://www.numpy.org/
 .. _Pandas: http://pandas.pydata.org/
 .. _xarray: http://xarray.pydata.org/
 .. _Bokeh: https://docs.bokeh.org/
 .. _colorcet: https://colorcet.holoviz.org/
+.. _Numba: https://numba.pydata.org/

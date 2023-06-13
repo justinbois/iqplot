@@ -222,7 +222,7 @@ def strip(
         )
 
     if tooltips is not None:
-        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, name="hover_glyphs"))
 
     if jitter_kwargs is None:
         jitter_kwargs = dict(width=0.1, mean=0, distribution="normal")

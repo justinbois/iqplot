@@ -322,7 +322,7 @@ def ecdf(
         marker_fun = utils._get_marker(p, marker)
 
     if tooltips is not None:
-        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, name="hover_glyphs"))
 
     fill_fill_color_supplied = "fill_color" in fill_kwargs
     marker_fill_color_supplied = "fill_color" in marker_kwargs
@@ -966,7 +966,7 @@ def histogram(
                 p.multi_line(source=cds, xs="__xs", ys="__ys", **rug_kwargs)
 
     if tooltips is not None:
-        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, name="hover_glyphs"))
 
     return _dist_legend(
         p,
@@ -1943,7 +1943,7 @@ def _stacked_histograms(
                     p.multi_line(source=cds, xs="__xs", ys="__ys", **rug_kwargs)
 
     if rug and tooltips is not None:
-        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, names=["hover_glyphs"]))
+        p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, name="hover_glyphs"))
 
     return p
 
