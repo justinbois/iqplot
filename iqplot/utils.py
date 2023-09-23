@@ -135,7 +135,7 @@ def _order_to_str(order):
         if type(item) not in [list, tuple, np.ndarray]:
             order[i] = str(order[i])
         else:
-            order[i] = (str(x) for x in item)
+            order[i] = tuple([str(x) for x in item])
 
     return order
 

@@ -39,7 +39,7 @@ def ecdf(
     tooltips=None,
     complementary=False,
     kind="collection",
-    style="dots",
+    style=None,
     arrangement="overlay",
     conf_int=False,
     ptiles=(2.5, 97.5),
@@ -116,7 +116,7 @@ def ecdf(
         ECDFs coded with colors based on the categorical variables. If
         'colored', the figure is populated with a single ECDF with
         circles colored based on the categorical variables.
-    style : str, default 'dots'
+    style : str, default 'staircase' for collection, 'dots' for colored
         The style of ECDF to make.
 
             - dots: Each data point is plotted as a dot.
@@ -167,6 +167,14 @@ def ecdf(
     marker_kwargs = copy.copy(marker_kwargs)
     line_kwargs = copy.copy(line_kwargs)
     fill_kwargs = copy.copy(fill_kwargs)
+
+    # Check to make sure kind is ok
+    if kind not in ['collection', 'colored']:
+        raise RuntimeError("`kind` must be in `['collection', 'colored']")
+
+    # Determine style
+    if style is None:
+        style = 'staircase' if kind =='collection' else 'dots'
 
     if conf_int:
         if type(ptiles) not in (list, tuple, np.ndarray) and len(ptiles) != 2:
@@ -308,8 +316,6 @@ def ecdf(
     elif kind == "colored":
         df[y] = df[q].transform(_ecdf_y, complementary=complementary)
         cols += [y]
-    else:
-        raise RuntimeError("`kind` must be in `['collection', 'colored']")
 
     _, df["__label"] = utils._source_and_labels_from_cats(df, cats)
     cols += ["__label"]
@@ -1179,6 +1185,13 @@ def spike(
         {},
     )
 
+    # Can't have a q be 'count' in Pandas v. 2.x Just make it always illegal
+    if q == 'count':
+        raise RuntimeError(
+            'Cannot make a spike plot with a quantitative variable named "count." '
+            + 'Rename the "count" column and start again.'
+        )
+
     if palette is None:
         palette = colorcet.b_glasbey_category10
     elif type(palette) == str:
@@ -1357,12 +1370,14 @@ def spike(
     # Spikes
     if "spike" in style:
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
-            df_count = (
-                g[q]
-                .value_counts()
-                .reset_index()
-                .rename(columns={"index": q, q: "__count"})
-            )
+            # Because of changes in how value_counts works, we have to be careful about
+            # renaming columns and indexes.
+            # See https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#value-counts-sets-the-resulting-name-to-count)
+            df_count = g[q].value_counts().reset_index()
+            if pd.__version__ >= '2.0.0':
+                df_count = df_count.rename(columns={'count': '__count'})
+            else:
+                df_count = df_count.rename(columns={"index": q, q: "__count"})
 
             if fraction:
                 df_count["__count"] /= df_count["__count"].sum()
@@ -1387,12 +1402,11 @@ def spike(
     # Overlay dots
     if "dot" in style:
         for i, (name, g) in enumerate(df.groupby(cats, sort=False)):
-            df_count = (
-                g[q]
-                .value_counts()
-                .reset_index()
-                .rename(columns={"index": q, q: "__count"})
-            )
+            df_count = g[q].value_counts().reset_index()
+            if pd.__version__ >= '2.0.0':
+                df_count = df_count.rename(columns={'count': '__count'})
+            else:
+                df_count = df_count.rename(columns={"index": q, q: "__count"})
 
             if fraction:
                 df_count["__count"] /= df_count["__count"].sum()
@@ -2067,9 +2081,14 @@ def _stacked_spikes(
                 )
 
         # Make a count data frame for spikes and dots
-        df_count = (
-            g[q].value_counts().reset_index().rename(columns={"index": q, q: "__count"})
-        )
+        df_count = g[q].value_counts().reset_index()
+        if pd.__version__ >= '2.0.0':
+            df_count = df_count.rename(columns={'count': '__count'})
+        else:
+            df_count = df_count.rename(columns={"index": q, q: "__count"})
+
+        if fraction:
+            df_count["__count"] /= df_count["__count"].sum()
 
         # For now, enforce fraction
         if fraction:

@@ -16,4 +16,4 @@ from .dist import *
 
 __author__ = """Justin Bois"""
 __email__ = "bois@caltech.edu"
-__version__ = "0.3.3"
+__version__ = "0.3.5"
