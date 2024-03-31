@@ -137,7 +137,7 @@ def ecdf(
         'diamond_cross', 'hex', 'inverted_triangle', 'square',
         'square_cross', 'square_x', 'triangle', 'x']
     marker_kwargs : dict
-        Keyword arguments to be passed to `p.circle()` or other relevant
+        Keyword arguments to be passed to `p.scatter()` or other relevant
         marker function.
     line_kwargs : dict
         Kwargs to be passed to `p.line()`, `p.ray()`, and `p.segment()`.
@@ -175,6 +175,10 @@ def ecdf(
     # Determine style
     if style is None:
         style = 'staircase' if kind =='collection' else 'dots'
+
+    # Check style
+    if style not in ['staircase', 'dots', 'formal']:
+        raise RuntimeError("`style` must be one of 'staircase', 'dots', 'formal'.")
 
     if conf_int:
         if type(ptiles) not in (list, tuple, np.ndarray) and len(ptiles) != 2:
@@ -326,7 +330,7 @@ def ecdf(
         p = bokeh.plotting.figure(**kwargs)
 
     if style == "dots":
-        marker_fun = utils._get_marker(p, marker)
+        marker = utils._check_marker(marker)
 
     if tooltips is not None:
         p.add_tools(bokeh.models.HoverTool(tooltips=tooltips, name="hover_glyphs"))
@@ -390,9 +394,9 @@ def ecdf(
                     marker_kwargs["name"] = "hover_glyphs"
 
                 if q_axis == "y":
-                    markers.append(marker_fun(source=g, x=y, y=q, **marker_kwargs))
+                    markers.append(p.scatter(source=g, x=y, y=q, marker=marker, **marker_kwargs))
                 else:
-                    markers.append(marker_fun(source=g, x=q, y=y, **marker_kwargs))
+                    markers.append(p.scatter(source=g, x=q, y=y, marker=marker, **marker_kwargs))
 
             if style == "formal":
                 (
@@ -422,7 +426,7 @@ def ecdf(
             if style != "dots" and tooltips is not None:
                 if q_axis == "y":
                     invisible_markers.append(
-                        p.circle(
+                        p.scatter(
                             source=g,
                             x=y,
                             y=q,
@@ -430,11 +434,12 @@ def ecdf(
                             fill_alpha=0,
                             line_alpha=0,
                             size=7,
+                            marker='circle',
                         )
                     )
                 else:
                     invisible_markers.append(
-                        p.circle(
+                        p.scatter(
                             source=g,
                             x=q,
                             y=y,
@@ -442,6 +447,7 @@ def ecdf(
                             fill_alpha=0,
                             line_alpha=0,
                             size=7,
+                            marker='circle',
                         )
                     )
     elif kind == "colored":
@@ -473,9 +479,9 @@ def ecdf(
             mkwargs["color"] = palette[i % len(palette)]
             labels.append(g["__label"].iloc[0])
             if q_axis == "y":
-                markers.append(marker_fun(source=source, x=y, y=q, **mkwargs))
+                markers.append(p.scatter(source=source, x=y, y=q, marker=marker, **mkwargs))
             else:
-                markers.append(marker_fun(source=source, x=q, y=y, **mkwargs))
+                markers.append(p.scatter(source=source, x=q, y=y, marker=marker, **mkwargs))
 
     return _dist_legend(
         p,
@@ -699,6 +705,11 @@ def histogram(
                 style = "step_filled"
             else:
                 style = "step"
+
+    # Check style
+    if style not in ['step', 'step_filled']:
+        raise RuntimeError("`style` must be one of 'step', 'step_filled'.")
+
 
     if arrangement == "stack":
         if rug_height is None:
@@ -1099,7 +1110,7 @@ def spike(
         Number of bootstrap replicates to do to compute confidence
         interval. Ignored if `conf_int` is False.
     marker_kwargs : dict
-        Keyword arguments to be passed to `p.circle()` for dots at the
+        Keyword arguments to be passed to `p.scatter()` for dots at the
         top of spikes.
     line_kwargs : dict
         Keyword arguments to pass to `p.segment()` in constructing the
@@ -1233,9 +1244,8 @@ def spike(
     if line_kwargs is None:
         line_kwargs = {"line_width": 2}
 
-    # Marker kqargs use Bokeh defaults
-    if marker_kwargs is None:
-        marker_kwargs = {}
+    # Marker kwargs use Bokeh defaults
+    marker_kwargs = utils._check_marker_kwargs(marker_kwargs)
 
     # Change any kwarg of "color" to line_color and fill_color, same with alpha
     marker_kwargs = utils._specific_fill_and_color_kwargs(marker_kwargs, "marker")
@@ -1418,11 +1428,11 @@ def spike(
 
             if q_axis == "y":
                 markers.append(
-                    p.circle(x="__count", y=q, source=df_count, **marker_kwargs)
+                    p.scatter(x="__count", y=q, source=df_count, marker='circle', **marker_kwargs)
                 )
             else:
                 markers.append(
-                    p.circle(x=q, y="__count", source=df_count, **marker_kwargs)
+                    p.scatter(x=q, y="__count", source=df_count, marker='circle', **marker_kwargs)
                 )
 
             labels.append(g["__label"].iloc[0])
@@ -1523,7 +1533,7 @@ def _formal_ecdf(
         If True, plot the empirical complementary cumulative
         distribution functon.
     marker_kwargs : dict
-        Any kwargs to be passed to p.circle().
+        Any kwargs to be passed to p.scatter().
     line_kwargs : dict
         Any kwargs to be passed to p.segment() and p.ray().
 
@@ -1558,16 +1568,16 @@ def _formal_ecdf(
         segment = p.segment(y[:-1], x[:-1], y[1:], x[:-1], **line_kwargs)
         ray_low = p.ray(x=0, y=x[0], angle=-np.pi / 2, length=0, **line_kwargs)
         ray_high = p.ray(x=1, y=x[-1], angle=np.pi / 2, length=0, **line_kwargs)
-        circle = p.circle(y, x, **marker_kwargs)
-        circle_low = p.circle([0], [0], **unfilled_kwargs)
-        circle_high = p.circle(y[:-1], x[1:], **unfilled_kwargs)
+        circle = p.scatter(y, x, marker='circle', **marker_kwargs)
+        circle_low = p.scatter([0], [0], marker='circle', **unfilled_kwargs)
+        circle_high = p.scatter(y[:-1], x[1:], marker='circle', **unfilled_kwargs)
     elif q_axis == "x":
         segment = p.segment(x[:-1], y[:-1], x[1:], y[:-1], **line_kwargs)
         ray_low = p.ray(x=x[0], y=0, angle=np.pi, length=0, **line_kwargs)
         ray_high = p.ray(x=x[-1], y=1, angle=0, length=0, **line_kwargs)
-        circle = p.circle(x, y, **marker_kwargs)
-        circle_low = p.circle([0], [0], **unfilled_kwargs)
-        circle_high = p.circle(x[1:], y[:-1], **unfilled_kwargs)
+        circle = p.scatter(x, y, marker='circle', **marker_kwargs)
+        circle_low = p.scatter([0], [0], marker='circle', **unfilled_kwargs)
+        circle_high = p.scatter(x[1:], y[:-1], marker='circle', **unfilled_kwargs)
 
     return p, circle, segment, ray_high, ray_low, circle_high, circle_low
 
@@ -1673,8 +1683,7 @@ def _stacked_ecdfs(
     if "min_border" not in kwargs:
         kwargs["min_border"] = kwargs.pop("min_border", 5)
 
-    if marker_kwargs is None:
-        marker_kwargs = {}
+    marker_kwargs = utils._check_marker_kwargs(marker_kwargs)
     if line_kwargs is None:
         line_kwargs = {}
     if fill_kwargs is None:
@@ -2144,9 +2153,9 @@ def _stacked_spikes(
                 marker_kwargs["fill_color"] = palette[i % len(palette)]
 
             if q_axis == "y":
-                p.circle(x="__count_cat", y=q, source=df_count, **marker_kwargs)
+                p.scatter(x="__count_cat", y=q, source=df_count, marker='circle', **marker_kwargs)
             else:
-                p.circle(x=q, y="__count_cat", source=df_count, **marker_kwargs)
+                p.scatter(x=q, y="__count_cat", source=df_count, marker='circle', **marker_kwargs)
 
     return p
 

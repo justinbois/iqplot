@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray
 
+import bokeh.core.enums
 
 def _fig_dimensions(kwargs):
     if (
@@ -116,10 +117,12 @@ def _data_cats(data, q, cats, show_legend, legend_label):
 
     # Ensure categorical columns are have data type str
     if type(cats) == str:
-        data.loc[:, cats] = data.loc[:, cats].astype(str)
+        data[cats] = data[cats].astype(str)
+        # data.loc[:, cats] = data.loc[:, cats].astype(str)
     else:
         for cat in cats:
-            data.loc[:, cat] = data.loc[:, cat].astype(str)
+            data[cat] = data[cat].astype(str)
+            # data.loc[:, cat] = data.loc[:, cat].astype(str)
 
     return data, q, cats, show_legend
 
@@ -175,42 +178,40 @@ def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
 
     return p, patch
 
+def _check_marker_kwargs(marker_kwargs):
+    if marker_kwargs is None:
+        marker_kwargs = {}
+    elif type(marker_kwargs) != dict:
+        raise RuntimeError("`marker_kwargs` must be a dict.")
 
-def _get_marker(p, marker):
-    if marker.lower() == "asterisk":
-        return p.asterisk
-    if marker.lower() == "circle":
-        return p.circle
-    if marker.lower() == "circle_cross":
-        return p.circle_cross
-    if marker.lower() == "circle_x":
-        return p.circle_x
-    if marker.lower() == "cross":
-        return p.cross
-    if marker.lower() == "dash":
-        return p.dash
-    if marker.lower() == "diamond":
-        return p.diamond
-    if marker.lower() == "diamond_cross":
-        return p.diamond_cross
-    if marker.lower() == "hex":
-        return p.hex
-    if marker.lower() == "inverted_triangle":
-        return p.inverted_triangle
-    if marker.lower() == "square":
-        return p.square
-    if marker.lower() == "square_cross":
-        return p.square_cross
-    if marker.lower() == "square_x":
-        return p.square_x
-    if marker.lower() == "triangle":
-        return p.triangle
-    if marker.lower() == "x":
-        return p.x
+    if 'marker' in marker_kwargs:
+        raise RuntimeError("'marker' cannot be a key in `marker_kwargs`. Specify using the `marker` kwargs instead.")
+    if 'source' in marker_kwargs:
+        raise RuntimeError("'source' cannot be a key in `marker_kwargs`.")
+    if 'x' in marker_kwargs:
+        raise RuntimeError("'x' cannot be a key in `marker_kwargs`.")
+    if 'y' in marker_kwargs:
+        raise RuntimeError("'y' cannot be a key in `marker_kwargs`.")
+    if 'cat' in marker_kwargs:
+        raise RuntimeError("'cat' cannot be a key in `marker_kwargs`.")
+    if 'legend' in marker_kwargs:
+        raise RuntimeError("'legend' cannot be a key in `marker_kwargs`.")
+    if 'legend_label' in marker_kwargs:
+        raise RuntimeError("'legend_label' cannot be a key in `marker_kwargs`.")
 
-    raise RuntimeError(
-        f"{marker} is an invalid marker specification. Acceptable values are ['asterisk', 'circle', 'circlecross', 'circle_x', 'cross', 'dash', 'diamond', 'diamondcross', 'hex', 'invertedtriangle', 'square', 'squarecross', 'squarex', 'triangle', 'x']"
-    )
+    return marker_kwargs
+
+
+def _check_marker(marker):
+    if marker not in bokeh.core.enums.MarkerType:
+        err_str = f"{marker} is an invalid marker specification. Acceptable values are ["
+        for marker in list(bokeh.core.enums.MarkerType)[:-1]:
+            err_str += f"{marker}, "
+        err_str += list(bokeh.core.enums.MarkerType)[-1] + '].'
+
+        raise RuntimeError(err_str)
+
+    return marker
 
 
 def _source_and_labels_from_cats(df, cats):

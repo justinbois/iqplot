@@ -111,8 +111,8 @@ def strip(
         If True, show grid lines for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
-        ["x", "y", "source", "cat", "legend"] are note allowed because
-        they are determined by other inputs.
+        ["x", "y", "source", "marker", "cat", "legend_label"] are note
+        allowed because they are determined by other inputs.
     jitter_kwargs : dict
         Keyword arguments to be passed to `bokeh.transform.jitter()`. If
         not specified, default is
@@ -185,6 +185,16 @@ def strip(
             else:
                 warnings.warn("`jitter` is deprecated. Use spread='jitter'.")
 
+    # Check spread
+    if spread is not None:
+        spread = spread.lower()
+    if spread == 'beeswarm':
+        raise RuntimeError("Did you mean `spread='swarm'`?")
+    if spread not in ('swarm', 'jitter', 'none', None):
+        raise RuntimeError(
+            "Invalid `spread`. Valid choices are 'swarm', 'jitter', and None."
+            )
+
     if spread is not None and spread != "none" and parcoord_column is not None:
         raise NotImplementedError(
             "Parallel coordinate plots are not implemented with jitter or swarm spreading."
@@ -249,10 +259,7 @@ def strip(
     if "marker_pad_px" not in swarm_kwargs:
         swarm_kwargs["marker_pad_px"] = 0
 
-    if marker_kwargs is None:
-        marker_kwargs = {}
-    elif type(marker_kwargs) != dict:
-        raise RuntimeError("`marker_kwargs` must be a dict.")
+    marker_kwargs = utils._check_marker_kwargs(marker_kwargs)
 
     if "name" not in marker_kwargs:
         marker_kwargs["name"] = "hover_glyphs"
@@ -286,7 +293,7 @@ def strip(
 
     if marker == "tick":
         marker = "dash"
-    marker_fun = utils._get_marker(p, marker)
+    marker = utils._check_marker(marker)
 
     if marker == "dash":
         if spread == "swarm":
@@ -311,19 +318,38 @@ def strip(
     if spread == "swarm":
         r = (marker_kwargs["size"] + marker_kwargs["line_width"]) / 2
 
-        if q_axis == "x" and np.all(utils._range_specified(p.x_range)):
-            q_range = [p.x_range.start, p.x_range.end]
-        elif q_axis == "y" and np.all(utils._range_specified(p.y_range)):
-            q_range = [p.y_range.start, p.y_range.end]
+        if (q_axis == 'x' and 'x_axis_type' in kwargs and kwargs['x_axis_type'] == 'log') or (q_axis == 'y' and 'y_axis_type' in kwargs and kwargs['y_axis_type'] == 'log'):
+            log_q = True
         else:
-            q_range_width = data[q].max() - data[q].min()
-            q_range = [
-                data[q].min() - 0.05 * q_range_width,
-                data[q].max() + 0.05 * q_range_width,
-            ]
+            log_q = False
+
+        if q_axis == "x" and np.all(utils._range_specified(p.x_range)):
+            if log_q:
+                q_range = [np.log10(p.x_range.start), np.log10(p.x_range.end)]
+            else:
+                q_range = [p.x_range.start, p.x_range.end]
+        elif q_axis == "y" and np.all(utils._range_specified(p.y_range)):
+            if log_q:
+                q_range = [np.log10(p.y_range.start), np.log10(p.y_range.end)]
+            else:
+                q_range = [p.y_range.start, p.y_range.end]
+        else:
+            if log_q:
+                q_range_width = np.log10(data[q]).max() - np.log10(data[q]).min()
+                q_range = [
+                    np.log10(data[q]).min() - 0.05 * q_range_width,
+                    np.log10(data[q]).max() + 0.05 * q_range_width,
+                ]
+            else:
+                q_range_width = data[q].max() - data[q].min()
+                q_range = [
+                    data[q].min() - 0.05 * q_range_width,
+                    data[q].max() + 0.05 * q_range_width,
+                ]
+
 
         swarm_transform = (
-            grouped[q].transform(_swarm, p, r, q_range, q_axis, **swarm_kwargs).values
+            grouped[q].transform(_swarm, p, r, q_range, q_axis, log_q, **swarm_kwargs).values
         )
         source_dict["__swarm"] = [
             (*cat, y_val) if type(cat) == tuple else (cat, y_val)
@@ -372,10 +398,11 @@ def strip(
         )
 
     if color_factors == "hex" or color_column == "cat" or not show_legend:
-        marker_fun(
+        p.scatter(
             source=bokeh.models.ColumnDataSource(source_dict),
             x=x,
             y=y,
+            marker=marker,
             **marker_kwargs,
         )
     else:
@@ -383,7 +410,7 @@ def strip(
         df = pd.DataFrame(source_dict)
         for i, (name, g) in enumerate(df.groupby(color_column)):
             marker_kwargs["color"] = palette[i % len(palette)]
-            mark = marker_fun(source=g, x=x, y=y, **marker_kwargs)
+            mark = p.scatter(source=g, x=x, y=y, marker=marker, **marker_kwargs)
             items.append((g["__label"].iloc[0], [mark]))
 
         if len(p.legend) == 1:
@@ -517,7 +544,7 @@ def box(
         A dictionary of kwargs to be passed into `p.segment()`
         when constructing the whiskers for the box plot.
     outlier_kwargs : dict, default None
-        A dictionary of kwargs to be passed into `p.circle()`
+        A dictionary of kwargs to be passed into `p.scatter()`
         when constructing the outliers for the box plot.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
@@ -615,7 +642,7 @@ def box(
     else:
         _, factors, color_factors = _get_cat_range(data, grouped, order, None, q_axis)
 
-    marker_fun = utils._get_marker(p, outlier_marker)
+    marker = utils._check_marker(outlier_marker)
 
     source_box, source_outliers = _box_source(data, cats, q, cols, min_data)
 
@@ -696,7 +723,7 @@ def box(
             **median_kwargs,
         )
         if display_points:
-            marker_fun(source=source_outliers, y="cat", x=q, **outlier_kwargs)
+            p.scatter(source=source_outliers, y="cat", x=q, marker=marker, **outlier_kwargs)
         if not cat_grid:
             p.ygrid.grid_line_color = None
     else:
@@ -750,7 +777,7 @@ def box(
             **median_kwargs,
         )
         if display_points:
-            marker_fun(source=source_outliers, x="cat", y=q, **outlier_kwargs)
+            p.scatter(source=source_outliers, x="cat", y=q, marker=marker, **outlier_kwargs)
         if not cat_grid:
             p.xgrid.grid_line_color = None
 
@@ -868,8 +895,8 @@ def stripbox(
         If True, display grid line for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
-        ["x", "y", "source", "cat", "legend"] are note allowed because
-        they are determined by other inputs.
+        ["x", "y", "marker", "source", "cat", "legend"] are not allowed
+        because they are determined by other inputs.
     jitter_kwargs : dict
         Keyword arguments to be passed to `bokeh.transform.jitter()`. If
         not specified, default is
@@ -1173,8 +1200,8 @@ def striphistogram(
         If True, display grid line for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
-        ["x", "y", "source", "cat", "legend"] are note allowed because
-        they are determined by other inputs.
+        ["x", "y", "source", "marker", "cat", "legend"] are note allowed
+        because they are determined by other inputs.
     jitter_kwargs : dict
         Keyword arguments to be passed to `bokeh.transform.jitter()`. If
         not specified, default is
@@ -1727,7 +1754,7 @@ def _swarm_px(
 
 
 def _swarm(
-    x, p, r, x_range, q_axis, corral="gutter", priority="ascending", marker_pad_px=0
+    x, p, r, x_range, q_axis, log_q, corral="gutter", priority="ascending", marker_pad_px=0
 ):
     if q_axis == "x":
         extra_padding = 0
@@ -1755,8 +1782,14 @@ def _swarm(
         n_factors = len(p.x_range.factors) + extra_padding
 
     max_y_px = h / n_factors / 2 - 2 * r
+
+    # Make adjustments in case we have log axes
+    xvals = np.array(x)
+    if log_q:
+        xvals = np.log10(xvals)
+
     y_pixels, n_overrun = _swarm_px(
-        np.array(x),
+        xvals,
         w,
         r,
         x_range,
