@@ -4,7 +4,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import xarray
 
 import bokeh.core.enums
 
@@ -90,7 +89,7 @@ def _parse_deprecations(
 
 
 def _data_cats(data, q, cats, show_legend, legend_label):
-    if type(data) == xarray.core.dataarray.DataArray:
+    if 'xarray.core.dataarray.DataArray' in str(type(data)):
         if q is None:
             if data.name is None:
                 q = "x"
@@ -103,6 +102,25 @@ def _data_cats(data, q, cats, show_legend, legend_label):
         data = pd.DataFrame({q: data.squeeze()})
         if cats is not None:
             raise RuntimeError("If `data` is a Numpy array, `cats` must be None.")
+    elif 'polars.dataframe.frame.DataFrame' in str(type(data)):
+        # For now, we just convert to Pandas. We will add functionality
+        # to work with polars data frames to take advantage of their
+        # performance in the future.
+        data = data.to_pandas()
+    elif 'polars.series.series.Series' in str(type(data)) or type(data) == pd.core.series.Series:
+        # For now, just convert to Pandas series if it's a Polars series
+        if 'polars.series.series.Series' in str(type(data)):
+            data = data.to_pandas()
+        if q is None:
+            if data.name is None:
+                q = 'x'
+            else:
+                q = data.name
+        data = pd.DataFrame({q: data})
+        if cats is not None:
+            raise RuntimeError("If `data` is a Pandas series, `cats` must be None.")
+    elif type(data) != pd.core.frame.DataFrame:
+        raise RuntimeError(f"Data type {type(data)} for argument `data` is not supported.")
 
     # Make a copy of the data frame
     data = data.copy()

@@ -163,6 +163,22 @@ def ecdf(
     output : bokeh.plotting.Figure instance
         Plot populated with ECDFs.
     """
+
+    # In the future, we will have a max_points kwarg that will lead to
+    # thinning of the ECDF. The doc string for the parameter is:
+        # max_points : int or None, default None, NOT YET IMPLEMENTED
+        # Maximum number of data points to use in a single ECDF. If the
+        # number of data points exceeds max_points, then the plot is
+        # constructed where points corresponding to the quantiles
+        # [1, 2, ..., max_points] / max_points are plotted. The upper
+        # and lower extreme points are always included. If this thinning
+        # is applied, then the resulting plotted ECDF will always lie
+        # slightly below the non-thinned ECDF. If None and the number of
+        # points for an ECDF is greater than 2000, there will be a
+        # warning that the number of points exceeds the maximum. The
+        # warning will not be issued if max_points an `int`.
+
+
     # Protect against mutability of dicts
     marker_kwargs = copy.copy(marker_kwargs)
     line_kwargs = copy.copy(line_kwargs)
@@ -1149,7 +1165,11 @@ def spike(
         else:
             ptiles = np.sort(ptiles)
 
-    one_cat = cats is None or len(data.groupby(cats)) == 1
+    # Quick check to see if there is only one category.
+    # This is not an ideal way to do it, since we convert to Pandas df
+    # just for the check, which we do later as well
+    data_check, _, _, _ = utils._data_cats(data, q, cats, False, None)
+    one_cat = cats is None or len(data_check.groupby(cats)) == 1
 
     if arrangement is None:
         arrangement = "overlay" if one_cat else "stack"
