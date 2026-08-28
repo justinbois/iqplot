@@ -142,10 +142,9 @@ def ecdf(
     line_kwargs : dict
         Kwargs to be passed to `p.line()`, `p.ray()`, and `p.segment()`.
     fill_kwargs : dict
-        Keyword arguments to pass to `p.patch()` when making the fill
-        for the step-filled histogram or confidence intervals. Ignored
-        if `style = 'step'` and `conf_int` is False. By default
-        {"fill_alpha": 0.3, "line_alpha": 0}.
+        Keyword arguments to pass to `p.patch()` when making the
+        confidence intervals for an ECDF. Ignored when `conf_int` is 
+        False. By default {"fill_alpha": 0.3, "line_alpha": 0}.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
