@@ -1,0 +1,120 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "iqplot"
+dynamic = ["version"]
+description = "Generate Bokeh plots for data sets with one quantitative variable."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Justin Bois", email = "bois@caltech.edu" }]
+maintainers = [{ name = "Justin Bois", email = "bois@caltech.edu" }]
+requires-python = ">=3.10"
+keywords = ["bokeh", "plotting", "visualization", "ecdf", "box plot", "histogram"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "bokeh>=3.0",
+    "colorcet",
+]
+
+[project.optional-dependencies]
+# Numba is optional; it accelerates ECDF and histogram computation.
+speedups = ["numba"]
+# Data structures iqplot accepts as input but does not require.
+data = ["xarray", "polars"]
+
+[project.urls]
+Homepage = "https://github.com/justinbois/iqplot"
+Documentation = "http://iqplot.github.io/"
+Repository = "https://github.com/justinbois/iqplot"
+Issues = "https://github.com/justinbois/iqplot/issues"
+
+[tool.hatch.version]
+path = "iqplot/__init__.py"
+
+[tool.hatch.build]
+exclude = [
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".pytest_cache",
+    "__pycache__",
+    ".gitignore",
+    ".DS_Store",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["iqplot"]
+
+[tool.hatch.build.targets.sdist]
+include = ["iqplot", "test", "README.md", "LICENSE", "pyproject.toml"]
+
+
+# ---------------------------------------------------------------------------
+# pixi
+# ---------------------------------------------------------------------------
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
+
+[tool.pixi.pypi-dependencies]
+iqplot = { path = ".", editable = true }
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+numpy = "*"
+pandas = "*"
+bokeh = ">=3.0"
+colorcet = "*"
+
+[tool.pixi.feature.dev.dependencies]
+numba = "*"
+xarray = "*"
+polars = "*"
+pyarrow = "*"  # needed by polars.DataFrame.to_pandas()
+pytest = "*"
+jupyterlab = "*"
+ipykernel = "*"
+nbval = "*"
+black = "*"
+hatch = "*"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+bokeh_sampledata = "*"
+
+[tool.pixi.feature.doc.dependencies]
+sphinx = "*"
+sphinx_rtd_theme = "*"
+sphinx-copybutton = "*"
+nbsphinx = "*"
+recommonmark = "*"
+pandoc = "*"
+jupyter = "*"
+
+[tool.pixi.feature.dev.tasks]
+test = "pytest --nbval-lax test/test_plots.ipynb"
+lab = "jupyter lab"
+build = "hatch build"
+
+[tool.pixi.feature.doc.tasks]
+doc = { cmd = "make html", cwd = "doc" }
+doc-clean = { cmd = "make clean", cwd = "doc" }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+doc = { features = ["dev", "doc"], solve-group = "default" }

@@ -96,16 +96,15 @@ def strip(
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
-        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
+        `tooltips=[('label 1', '@col1'), ('label 2', '@col2')]`.
     marker : str, default 'circle'
-        Name of marker to be used in the plot (ignored if `formal` is
-        False). Must be one of['asterisk', 'circle', 'circle_cross',
-        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
-        'inverted_triangle', 'square', 'square_cross', 'square_x',
-        'triangle', 'x']
+        Name of marker to be used in the plot. Must be one of
+        ['asterisk', 'circle', 'circle_cross', 'circle_x', 'cross',
+        'dash', 'diamond', 'diamond_cross', 'hex', 'inverted_triangle',
+        'square', 'square_cross', 'square_x', 'triangle', 'x'].
     spread : str or None, default None
         If 'jitter', spread points out using a jitter transform. If
-        'swarm', spread points in beeswarm style. In None or 'none', do
+        'swarm', spread points in beeswarm style. If None or 'none', do
         not spread.
     cat_grid : bool, default False
         If True, show grid lines for categorical axis.
@@ -125,9 +124,9 @@ def strip(
 
             - 'corral': Either 'gutter' (default) or 'wrap'. This
             specifies how points that are moved too far out are dealt
-            with. Using 'gutter', points are overlayed at the maximum
+            with. Using 'gutter', points are overlaid at the maximum
             allowed distance. Using 'wrap', points are reflected inwards
-            form the maximal extent and possibly overlayed with other
+            from the maximal extent and possibly overlaid with other
             points.
 
             - 'priority': Either 'ascending' (default) or 'descending'.
@@ -138,7 +137,8 @@ def strip(
             default 0.
     parcoord_kwargs : dict
         Keyword arguments to be passed to `p.line()` when making lines
-        for kwargs. Default is to have one-pixel gray lines.
+        for the parallel coordinate plot. Default is to have one-pixel
+        gray lines.
     jitter : bool, default False
         Deprecated, use `spread`.
     horizontal : bool or None, default None
@@ -188,12 +188,12 @@ def strip(
     # Check spread
     if spread is not None:
         spread = spread.lower()
-    if spread == 'beeswarm':
+    if spread == "beeswarm":
         raise RuntimeError("Did you mean `spread='swarm'`?")
-    if spread not in ('swarm', 'jitter', 'none', None):
+    if spread not in ("swarm", "jitter", "none", None):
         raise RuntimeError(
             "Invalid `spread`. Valid choices are 'swarm', 'jitter', and None."
-            )
+        )
 
     if spread is not None and spread != "none" and parcoord_column is not None:
         raise NotImplementedError(
@@ -209,6 +209,10 @@ def strip(
         else:
             show_legend = not _color_column_hexcodes(data, color_column)
 
+    # The legend for a strip plot comes from `color_column`, not `cats`,
+    # so only `order` is checked here.
+    utils._check_cats_none(cats, order)
+
     data, q, cats, show_legend = utils._data_cats(data, q, cats, show_legend, None)
     order = utils._order_to_str(order)
 
@@ -223,9 +227,9 @@ def strip(
             data, grouped, q, order, color_column, q_axis, kwargs
         )
     else:
-        if type(p.x_range) == bokeh.models.ranges.FactorRange and q_axis == "x":
+        if isinstance(p.x_range, bokeh.models.ranges.FactorRange) and q_axis == "x":
             raise RuntimeError("`q_axis` is 'x', but `p` has a categorical x-axis.")
-        elif type(p.y_range) == bokeh.models.ranges.FactorRange and q_axis == "y":
+        elif isinstance(p.y_range, bokeh.models.ranges.FactorRange) and q_axis == "y":
             raise RuntimeError("`q_axis` is 'y', but `p` has a categorical y-axis.")
 
         _, factors, color_factors = _get_cat_range(
@@ -237,7 +241,7 @@ def strip(
 
     if jitter_kwargs is None:
         jitter_kwargs = dict(width=0.1, mean=0, distribution="normal")
-    elif type(jitter_kwargs) != dict:
+    elif not isinstance(jitter_kwargs, dict):
         raise RuntimeError("`jitter_kwargs` must be a dict.")
     elif "width" not in jitter_kwargs:
         if (
@@ -250,7 +254,7 @@ def strip(
 
     if swarm_kwargs is None:
         swarm_kwargs = dict(corral="gutter", priority="ascending", marker_pad_px=0)
-    elif type(swarm_kwargs) != dict:
+    elif not isinstance(swarm_kwargs, dict):
         raise RuntimeError("`swarm_kwargs` must be a dict.")
     if "corral" not in swarm_kwargs:
         swarm_kwargs["corral"] = "gutter"
@@ -318,7 +322,11 @@ def strip(
     if spread == "swarm":
         r = (marker_kwargs["size"] + marker_kwargs["line_width"]) / 2
 
-        if (q_axis == 'x' and 'x_axis_type' in kwargs and kwargs['x_axis_type'] == 'log') or (q_axis == 'y' and 'y_axis_type' in kwargs and kwargs['y_axis_type'] == 'log'):
+        if (
+            q_axis == "x" and "x_axis_type" in kwargs and kwargs["x_axis_type"] == "log"
+        ) or (
+            q_axis == "y" and "y_axis_type" in kwargs and kwargs["y_axis_type"] == "log"
+        ):
             log_q = True
         else:
             log_q = False
@@ -347,12 +355,13 @@ def strip(
                     data[q].max() + 0.05 * q_range_width,
                 ]
 
-
         swarm_transform = (
-            grouped[q].transform(_swarm, p, r, q_range, q_axis, log_q, **swarm_kwargs).values
+            grouped[q]
+            .transform(_swarm, p, r, q_range, q_axis, log_q, **swarm_kwargs)
+            .values
         )
         source_dict["__swarm"] = [
-            (*cat, y_val) if type(cat) == tuple else (cat, y_val)
+            (*cat, y_val) if isinstance(cat, tuple) else (cat, y_val)
             for cat, y_val in zip(source_dict["cat"], swarm_transform)
         ]
 
@@ -385,7 +394,7 @@ def strip(
         if parcoord_kwargs is None:
             line_color = "gray"
             parcoord_kwargs = {}
-        elif type(parcoord_kwargs) != dict:
+        elif not isinstance(parcoord_kwargs, dict):
             raise RuntimeError("`parcoord_kwargs` must be a dict.")
 
         if "color" in parcoord_kwargs and "line_color" not in parcoord_kwargs:
@@ -431,21 +440,17 @@ def strip(
                     title=color_column,
                 )
                 p.add_layout(legend, legend_location)
-            elif (
-                legend_location
-                in [
-                    "top_left",
-                    "top_center",
-                    "top_right",
-                    "center_right",
-                    "bottom_right",
-                    "bottom_center",
-                    "bottom_left",
-                    "center_left",
-                    "center",
-                ]
-                or type(legend_location) == tuple
-            ):
+            elif legend_location in [
+                "top_left",
+                "top_center",
+                "top_right",
+                "center_right",
+                "bottom_right",
+                "bottom_center",
+                "bottom_left",
+                "center_left",
+                "center",
+            ] or isinstance(legend_location, tuple):
                 legend = bokeh.models.Legend(
                     items=items,
                     location=legend_location,
@@ -523,11 +528,10 @@ def box(
         suppress them. This should only be False when using the boxes
         as annotation on another plot.
     outlier_marker : str, default 'circle'
-        Name of marker to be used in the plot (ignored if `formal` is
-        False). Must be one of['asterisk', 'circle', 'circle_cross',
-        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
-        'inverted_triangle', 'square', 'square_cross', 'square_x',
-        'triangle', 'x']
+        Name of marker to be used in the plot. Must be one of
+        ['asterisk', 'circle', 'circle_cross', 'circle_x', 'cross',
+        'dash', 'diamond', 'diamond_cross', 'hex', 'inverted_triangle',
+        'square', 'square_cross', 'square_x', 'triangle', 'x'].
     min_data : int, default 5
         Minimum number of data points in a given category in order to
         make a box and whisker. Otherwise, individual data points are
@@ -546,12 +550,14 @@ def box(
     outlier_kwargs : dict, default None
         A dictionary of kwargs to be passed into `p.scatter()`
         when constructing the outliers for the box plot.
+    display_outliers : bool, default None
+        Deprecated. Use `display_points`.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
         Deprecated, use `q`.
     kwargs
-        Kwargs that are passed to bokeh.plotting.figure() in contructing
+        Kwargs that are passed to bokeh.plotting.figure() in constructing
         the figure.
 
     Returns
@@ -590,6 +596,9 @@ def box(
     if palette is None:
         palette = colorcet.b_glasbey_category10
 
+    # A box plot has no legend, so only `order` is checked here.
+    utils._check_cats_none(cats, order)
+
     data, q, cats, _ = utils._data_cats(data, q, cats, False, None)
     order = utils._order_to_str(order)
 
@@ -599,13 +608,13 @@ def box(
 
     if outlier_kwargs is None:
         outlier_kwargs = dict()
-    elif type(outlier_kwargs) != dict:
+    elif not isinstance(outlier_kwargs, dict):
         raise RuntimeError("`outlier_kwargs` must be a dict.")
 
     if box_kwargs is None:
         box_kwargs = {"line_color": None}
         box_width = 0.4
-    elif type(box_kwargs) != dict:
+    elif not isinstance(box_kwargs, dict):
         raise RuntimeError("`box_kwargs` must be a dict.")
     else:
         box_width = box_kwargs.pop("width", 0.4)
@@ -614,14 +623,16 @@ def box(
 
     if whisker_kwargs is None:
         whisker_kwargs = {"line_color": "black"}
-    elif type(whisker_kwargs) != dict:
+    elif not isinstance(whisker_kwargs, dict):
         raise RuntimeError("`whisker_kwargs` must be a dict.")
+    elif "line_color" not in whisker_kwargs and "color" not in whisker_kwargs:
+        whisker_kwargs["line_color"] = "black"
 
     if median_kwargs is None:
         median_kwargs = {"line_color": "white"}
-    elif type(median_kwargs) != dict:
+    elif not isinstance(median_kwargs, dict):
         raise RuntimeError("`median_kwargs` must be a dict.")
-    elif "line_color" not in median_kwargs:
+    elif "color" not in median_kwargs and "line_color" not in median_kwargs:
         median_kwargs["line_color"] = "white"
 
     if q_axis == "x":
@@ -723,7 +734,9 @@ def box(
             **median_kwargs,
         )
         if display_points:
-            p.scatter(source=source_outliers, y="cat", x=q, marker=marker, **outlier_kwargs)
+            p.scatter(
+                source=source_outliers, y="cat", x=q, marker=marker, **outlier_kwargs
+            )
         if not cat_grid:
             p.ygrid.grid_line_color = None
     else:
@@ -777,7 +790,9 @@ def box(
             **median_kwargs,
         )
         if display_points:
-            p.scatter(source=source_outliers, x="cat", y=q, marker=marker, **outlier_kwargs)
+            p.scatter(
+                source=source_outliers, x="cat", y=q, marker=marker, **outlier_kwargs
+            )
         if not cat_grid:
             p.xgrid.grid_line_color = None
 
@@ -808,7 +823,6 @@ def stripbox(
     swarm_kwargs=None,
     parcoord_kwargs=None,
     whisker_caps=True,
-    display_points=True,
     min_data=5,
     box_kwargs=None,
     median_kwargs=None,
@@ -880,16 +894,15 @@ def stripbox(
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
-        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
+        `tooltips=[('label 1', '@col1'), ('label 2', '@col2')]`.
     marker : str, default 'circle'
-        Name of marker to be used in the plot (ignored if `formal` is
-        False). Must be one of['asterisk', 'circle', 'circle_cross',
-        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
-        'inverted_triangle', 'square', 'square_cross', 'square_x',
-        'triangle', 'x']
+        Name of marker to be used in the plot. Must be one of
+        ['asterisk', 'circle', 'circle_cross', 'circle_x', 'cross',
+        'dash', 'diamond', 'diamond_cross', 'hex', 'inverted_triangle',
+        'square', 'square_cross', 'square_x', 'triangle', 'x'].
     spread : str or None, default None
         If 'jitter', spread points out using a jitter transform. If
-        'swarm', spread points in beeswarm style. In None or 'none', do
+        'swarm', spread points in beeswarm style. If None or 'none', do
         not spread.
     cat_grid : bool, default False
         If True, display grid line for categorical axis.
@@ -909,9 +922,9 @@ def stripbox(
 
             - 'corral': Either 'gutter' (default) or 'wrap'. This
             specifies how points that are moved too far out are dealt
-            with. Using 'gutter', points are overlayed at the maximum
+            with. Using 'gutter', points are overlaid at the maximum
             allowed distance. Using 'wrap', points are reflected inwards
-            form the maximal extent and possibly overlayed with other
+            from the maximal extent and possibly overlaid with other
             points.
 
             - 'priority': Either 'ascending' (default) or 'descending'.
@@ -922,7 +935,8 @@ def stripbox(
             default 0.
     parcoord_kwargs : dict
         Keyword arguments to be passed to `p.line()` when making lines
-        for kwargs. Default is to have one-pixel gray lines.
+        for the parallel coordinate plot. Default is to have one-pixel
+        gray lines.
     whisker_caps : bool, default True
         If True, put caps on whiskers. If False, omit caps.
     min_data : int, default 5
@@ -955,6 +969,10 @@ def stripbox(
     output : bokeh.plotting.Figure instance
         Plot populated with a strip-box plot.
     """
+    # display_points not allowed in kwargs
+    if "display_points" in kwargs:
+        raise ValueError("display_points not allowed as a kwarg for stripbox.")
+
     # Protect against mutability of dicts
     box_kwargs = copy.copy(box_kwargs)
     median_kwargs = copy.copy(median_kwargs)
@@ -976,12 +994,12 @@ def stripbox(
 
     if median_kwargs is None:
         median_kwargs = dict(line_color="gray")
-    if "color" not in box_kwargs and "line_color" not in median_kwargs:
+    if "color" not in median_kwargs and "line_color" not in median_kwargs:
         median_kwargs["line_color"] = "gray"
 
     if whisker_kwargs is None:
         whisker_kwargs = dict(line_color="gray")
-    if "color" not in box_kwargs and "line_color" not in whisker_kwargs:
+    if "color" not in whisker_kwargs and "line_color" not in whisker_kwargs:
         whisker_kwargs["line_color"] = "gray"
 
     if top_level == "box":
@@ -1157,7 +1175,7 @@ def striphistogram(
         If None, create a new figure. Otherwise, populate the existing
         figure `p`.
     top_level : str, default 'strip'
-        If 'histogram', the histogram is overlaid. If 'strip', the strip\
+        If 'histogram', the histogram is overlaid. If 'strip', the strip
         plot is overlaid.
     show_legend : bool, default False
         If True, display legend.
@@ -1187,20 +1205,21 @@ def striphistogram(
     tooltips : list of 2-tuples
         Specification for tooltips as per Bokeh specifications. For
         example, if we want `col1` and `col2` tooltips, we can use
-        `tooltips=[('label 1': '@col1'), ('label 2': '@col2')]`.
+        `tooltips=[('label 1', '@col1'), ('label 2', '@col2')]`.
     marker : str, default 'circle'
-        Name of marker to be used in the plot (ignored if `formal` is
-        False). Must be one of['asterisk', 'circle', 'circle_cross',
-        'circle_x', 'cross', 'dash', 'diamond', 'diamond_cross', 'hex',
-        'inverted_triangle', 'square', 'square_cross', 'square_x',
-        'triangle', 'x']
-    jitter : bool, default False
-        If True, apply a jitter transform to the glyphs.
+        Name of marker to be used in the plot. Must be one of
+        ['asterisk', 'circle', 'circle_cross', 'circle_x', 'cross',
+        'dash', 'diamond', 'diamond_cross', 'hex', 'inverted_triangle',
+        'square', 'square_cross', 'square_x', 'triangle', 'x'].
+    spread : str or None, default None
+        If 'jitter', spread points out using a jitter transform. If
+        'swarm', spread points in beeswarm style. If None or 'none', do
+        not spread.
     cat_grid : bool, default True
         If True, display grid line for categorical axis.
     marker_kwargs : dict
         Keyword arguments to pass when adding markers to the plot.
-        ["x", "y", "source", "marker", "cat", "legend"] are note allowed
+        ["x", "y", "source", "marker", "cat", "legend"] are not allowed
         because they are determined by other inputs.
     jitter_kwargs : dict
         Keyword arguments to be passed to `bokeh.transform.jitter()`. If
@@ -1214,9 +1233,9 @@ def striphistogram(
 
             - 'corral': Either 'gutter' (default) or 'wrap'. This
             specifies how points that are moved too far out are dealt
-            with. Using 'gutter', points are overlayed at the maximum
+            with. Using 'gutter', points are overlaid at the maximum
             allowed distance. Using 'wrap', points are reflected inwards
-            form the maximal extent and possibly overlayed with other
+            from the maximal extent and possibly overlaid with other
             points.
 
             - 'priority': Either 'ascending' (default) or 'descending'.
@@ -1227,7 +1246,8 @@ def striphistogram(
             default 0.
     parcoord_kwargs : dict
         Keyword arguments to be passed to `p.line()` when making lines
-        for kwargs. Default is to have one-pixel gray lines.
+        for the parallel coordinate plot. Default is to have one-pixel
+        gray lines.
     bins : int, array_like, or str, default 'freedman-diaconis'
         If int or array_like, setting for `bins` kwarg to be passed to
         `np.histogram()`. If 'exact', then each unique value in the
@@ -1237,17 +1257,17 @@ def striphistogram(
         `freedman-diaconis`, uses the Freedman-Diaconis rule for number
         of bins.
     style : None or one of ['step', 'step_filled']
-        Default for overlayed histograms is 'step' and for stacked
-        histograms 'step_filled'. The exception is when `cont_int` is
+        Default for overlaid histograms is 'step' and for stacked
+        histograms 'step_filled'. The exception is when `conf_int` is
         True, in which case `style` must be 'step'.
     mirror : bool, default True
         If True, reflect the histogram through zero.
     hist_height : float, default 0.75
-        Maximal height of histogram of its confidence interval as a
+        Maximal height of histogram or its confidence interval as a
         fraction of available height along categorical axis. Only active
         when `arrangement` is 'stack'.
     conf_int : bool, default False
-        If True, display confidence interval of ECDF.
+        If True, display confidence interval of the histogram.
     ptiles : list, default (2.5, 97.5)
         The percentiles to use for the confidence interval of the
         histogram. Ignored if `conf_int` is False.
@@ -1262,6 +1282,8 @@ def striphistogram(
         for the step-filled histogram or confidence intervals. Ignored
         if `style = 'step'` and `conf_int` is False. By default
         {"fill_alpha": 0.3, "line_alpha": 0}.
+    jitter : bool, default False
+        Deprecated, use `spread`.
     horizontal : bool or None, default None
         Deprecated. Use `q_axis`.
     val : hashable
@@ -1434,7 +1456,7 @@ def _get_cat_range(df, grouped, order, color_column, q_axis):
         else:
             factors = tuple([str(key) for key in grouped.groups.keys()])
     else:
-        if type(order[0]) in [list, tuple]:
+        if isinstance(order[0], (list, tuple)):
             factors = tuple([tuple([str(k) for k in key]) for key in order])
         else:
             factors = tuple([str(entry) for entry in order])
@@ -1455,7 +1477,7 @@ def _get_cat_range(df, grouped, order, color_column, q_axis):
 
 
 def _color_column_hexcodes(df, color_column):
-    """Return True of the color column consists of all hex codes"""
+    """Return True if the color column consists of all hex codes."""
     try:
         return df[color_column].str.match(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$").all()
     except:
@@ -1494,7 +1516,7 @@ def _cat_figure(df, grouped, q, order, color_column, q_axis, kwargs):
 def _cat_source_dict(df, cats, cols, color_column):
     cat_source, labels = utils._source_and_labels_from_cats(df, cats)
 
-    if type(cols) in [list, tuple, pd.core.indexes.base.Index]:
+    if isinstance(cols, (list, tuple, pd.Index)):
         source_dict = {col: list(df[col].values) for col in cols}
     else:
         source_dict = {cols: list(df[cols].values)}
@@ -1510,7 +1532,7 @@ def _cat_source_dict(df, cats, cols, color_column):
 
 
 def _parcoord_source(data, q, cats, q_axis, parcoord_column, factors):
-    if type(cats) not in [list, tuple]:
+    if not isinstance(cats, (list, tuple)):
         cats = [cats]
         tuple_factors = False
     else:
@@ -1629,7 +1651,7 @@ def _box_source(df, cats, q, cols, min_data):
 
 
 def _out_every_interval(y, intervals, epsilon=1e-6):
-    """Check to see if a value `y` list outside every interval in a
+    """Check to see if a value `y` lies outside every interval in a
     list of 2-tuples `intervals`."""
     for interval in intervals:
         if y > interval[0] + epsilon and y < interval[1] - epsilon:
@@ -1654,7 +1676,7 @@ def _swarm_px(
     Parameters
     ----------
     x : array_like
-        Array of values of quantitative varaible.
+        Array of values of quantitative variable.
     frame_width : int or float
         Width of plot frame in pixels.
     r : float
@@ -1667,14 +1689,14 @@ def _swarm_px(
         the quantitative axis.
     max_y_px : float, default np.inf
         Maximum allowed displacement. Any points with computed y-values
-        beyond this will be corraled.
+        beyond this will be corralled.
     corral : str, default 'gutter'
         Either 'gutter' or 'wrap'. How to corral points beyond the
         maximum displacement.
-    priority : str, either
+    priority : str, default 'ascending'
         Sort order when determining which points get moved in the
         y-direction first. Either 'ascending' or 'descending'.
-    marker_pad_px : int of float
+    marker_pad_px : int or float
         Gap between markers in units of pixels.
 
     Returns
@@ -1709,7 +1731,7 @@ def _swarm_px(
                 else:
                     continue
             if y_pixels[j] < np.inf:
-                offset = np.sqrt(4 * r ** 2 - dist ** 2) + marker_pad_px
+                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
                 intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
 
         # Scan points to the left
@@ -1721,11 +1743,11 @@ def _swarm_px(
                 else:
                     continue
             if y_pixels[j] < np.inf:
-                offset = np.sqrt(4 * r ** 2 - dist ** 2) + marker_pad_px
+                offset = np.sqrt(4 * r**2 - dist**2) + marker_pad_px
                 intervals.append([y_pixels[j] - offset, y_pixels[j] + offset])
 
         # Any y-position must be outside all intervals and should be at the edge of one of the intervals
-        # Need to find first candidate the satisfies this
+        # Need to find the first candidate that satisfies this
         y_cand = 0
         if len(intervals) > 0:
             candidates = sorted(np.array(intervals).flatten(), key=abs)
@@ -1754,11 +1776,19 @@ def _swarm_px(
 
 
 def _swarm(
-    x, p, r, x_range, q_axis, log_q, corral="gutter", priority="ascending", marker_pad_px=0
+    x,
+    p,
+    r,
+    x_range,
+    q_axis,
+    log_q,
+    corral="gutter",
+    priority="ascending",
+    marker_pad_px=0,
 ):
     if q_axis == "x":
         extra_padding = 0
-        if type(p.y_range.factors[0]) == tuple:
+        if isinstance(p.y_range.factors[0], tuple):
             if len(p.y_range.factors[0]) >= 2:
                 extra_padding += p.y_range.group_padding
             if len(p.y_range.factors[0]) > 2:
@@ -1770,7 +1800,7 @@ def _swarm(
         n_factors = len(p.y_range.factors) + extra_padding
     else:
         extra_padding = 0
-        if type(p.x_range.factors[0]) == tuple:
+        if isinstance(p.x_range.factors[0], tuple):
             if len(p.x_range.factors[0]) >= 2:
                 extra_padding += p.x_range.group_padding
             if len(p.x_range.factors[0]) > 2:

@@ -3,3 +3,6 @@ dist/
 iqplot.egg-info/
 sandbox/
 .DS_Store
+.pixi/
+*.egg-info/
+__pycache__/

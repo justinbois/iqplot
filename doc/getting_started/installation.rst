@@ -13,10 +13,9 @@ Dependencies
 
 iqplot has the following dependencies.
 
-- Python 3.6 or newer
+- Python 3.10 or newer
 - NumPy_
 - Pandas_
-- xarray_
 - Bokeh_
 - colorcet_
 

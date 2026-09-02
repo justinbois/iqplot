@@ -1,4 +1,5 @@
 """Utility functions for parsing inputs."""
+
 import copy
 import warnings
 
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 import bokeh.core.enums
+
 
 def _fig_dimensions(kwargs):
     if (
@@ -39,7 +41,7 @@ def _parse_deprecations(
     fill_kwargs,
 ):
     if q_axis not in ("x", "y"):
-        raise RuntimeError("Invalid `q_axis`. Must by 'x' or 'y'.")
+        raise RuntimeError("Invalid `q_axis`. Must be 'x' or 'y'.")
 
     if horizontal is not None:
         if (horizontal and q_axis != horiz_q_axis) or (
@@ -77,7 +79,6 @@ def _parse_deprecations(
     if conf_int_kwargs is not None:
         if fill_kwargs is None:
             fill_kwargs = copy.copy(conf_int_kwargs)
-            warnings.warn(f"`conf_int_kwargs is deprecated. Use `fill_kwargs`.")
         elif conf_int_kwargs != fill_kwargs:
             raise RuntimeError(
                 "`fill_kwargs` and `conf_int_kwargs` in disagreement. Use `fill_kwargs`; `conf_int_kwargs` is deprecated."
@@ -88,42 +89,69 @@ def _parse_deprecations(
     return q, legend_click_policy, fill_kwargs
 
 
+def _check_cats_none(cats, order, show_legend=False, legend_label=None):
+    """Check for kwargs that are disallowed when `cats` is None.
+
+    Must be called before `_data_cats()`, which replaces a `cats` of
+    None with a dummy categorical variable. `show_legend` and
+    `legend_label` are omitted for plots whose legend is not built from
+    `cats`, in which case only `order` is checked.
+    """
+    if cats is None:
+        if show_legend and legend_label is None:
+            raise RuntimeError(
+                "No legend to show if `cats` and `legend_label` are None."
+            )
+        if order is not None:
+            raise RuntimeError("No `order` is allowed if `cats` is None.")
+
+
 def _data_cats(data, q, cats, show_legend, legend_label):
-    if 'xarray.core.dataarray.DataArray' in str(type(data)):
+    if "xarray.core.dataarray.DataArray" in str(type(data)):
         if q is None:
             if data.name is None:
                 q = "x"
             else:
                 q = data.name
         data = pd.DataFrame({q: data.squeeze().values})
-    elif type(data) == np.ndarray:
+    elif isinstance(data, np.ndarray):
         if q is None:
             q = "x"
         data = pd.DataFrame({q: data.squeeze()})
         if cats is not None:
             raise RuntimeError("If `data` is a Numpy array, `cats` must be None.")
-    elif 'polars.dataframe.frame.DataFrame' in str(type(data)):
+    elif "polars.dataframe.frame.DataFrame" in str(type(data)):
         # For now, we just convert to Pandas. We will add functionality
         # to work with polars data frames to take advantage of their
         # performance in the future.
         data = data.to_pandas()
-    elif 'polars.series.series.Series' in str(type(data)) or type(data) == pd.core.series.Series:
+    elif "polars.series.series.Series" in str(type(data)) or isinstance(
+        data, pd.Series
+    ):
         # For now, just convert to Pandas series if it's a Polars series
-        if 'polars.series.series.Series' in str(type(data)):
+        if "polars.series.series.Series" in str(type(data)):
             data = data.to_pandas()
         if q is None:
             if data.name is None:
-                q = 'x'
+                q = "x"
             else:
                 q = data.name
         data = pd.DataFrame({q: data})
         if cats is not None:
             raise RuntimeError("If `data` is a Pandas series, `cats` must be None.")
-    elif type(data) != pd.core.frame.DataFrame:
-        raise RuntimeError(f"Data type {type(data)} for argument `data` is not supported.")
+    elif not isinstance(data, pd.DataFrame):
+        raise RuntimeError(
+            f"Data type {type(data)} for argument `data` is not supported."
+        )
 
     # Make a copy of the data frame
     data = data.copy()
+
+    # A tuple or Index of column names is converted to a list. Pandas
+    # takes a tuple to be a single column name and an Index to be a
+    # grouping vector, neither of which is meant here.
+    if isinstance(cats, (tuple, pd.Index)):
+        cats = list(cats)
 
     if cats is None:
         if legend_label is None:
@@ -133,27 +161,25 @@ def _data_cats(data, q, cats, show_legend, legend_label):
             data["__dummy_cat"] = legend_label
         cats = "__dummy_cat"
 
-    # Ensure categorical columns are have data type str
-    if type(cats) == str:
-        data[cats] = data[cats].astype(str)
-        # data.loc[:, cats] = data.loc[:, cats].astype(str)
-    else:
-        for cat in cats:
-            data[cat] = data[cat].astype(str)
-            # data.loc[:, cat] = data.loc[:, cat].astype(str)
+    # Ensure the categorical columns are present and have data type str
+    for cat in cats if isinstance(cats, (list, tuple)) else [cats]:
+        if cat not in data.columns:
+            raise RuntimeError(f"{cat} is not a column in the inputted data frame")
+        data[cat] = data[cat].astype(str)
+        # data.loc[:, cat] = data.loc[:, cat].astype(str)
 
     return data, q, cats, show_legend
 
 
 def _order_to_str(order):
-    """Convert entries in `order` to strings"""
+    """Convert entries in `order` to strings."""
     if order is None:
         return order
 
     order = list(order)
 
     for i, item in enumerate(order):
-        if type(item) not in [list, tuple, np.ndarray]:
+        if not isinstance(item, (list, tuple, np.ndarray)):
             order[i] = str(order[i])
         else:
             order[i] = tuple([str(x) for x in item])
@@ -164,6 +190,7 @@ def _order_to_str(order):
 def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
     """
     Create a filled region between two curves.
+
     Parameters
     ----------
     p : bokeh.plotting.Figure instance
@@ -196,25 +223,28 @@ def _fill_between(p, x1=None, y1=None, x2=None, y2=None, **kwargs):
 
     return p, patch
 
+
 def _check_marker_kwargs(marker_kwargs):
     if marker_kwargs is None:
         marker_kwargs = {}
-    elif type(marker_kwargs) != dict:
+    elif not isinstance(marker_kwargs, dict):
         raise RuntimeError("`marker_kwargs` must be a dict.")
 
-    if 'marker' in marker_kwargs:
-        raise RuntimeError("'marker' cannot be a key in `marker_kwargs`. Specify using the `marker` kwargs instead.")
-    if 'source' in marker_kwargs:
+    if "marker" in marker_kwargs:
+        raise RuntimeError(
+            "'marker' cannot be a key in `marker_kwargs`. Specify using the `marker` kwargs instead."
+        )
+    if "source" in marker_kwargs:
         raise RuntimeError("'source' cannot be a key in `marker_kwargs`.")
-    if 'x' in marker_kwargs:
+    if "x" in marker_kwargs:
         raise RuntimeError("'x' cannot be a key in `marker_kwargs`.")
-    if 'y' in marker_kwargs:
+    if "y" in marker_kwargs:
         raise RuntimeError("'y' cannot be a key in `marker_kwargs`.")
-    if 'cat' in marker_kwargs:
+    if "cat" in marker_kwargs:
         raise RuntimeError("'cat' cannot be a key in `marker_kwargs`.")
-    if 'legend' in marker_kwargs:
+    if "legend" in marker_kwargs:
         raise RuntimeError("'legend' cannot be a key in `marker_kwargs`.")
-    if 'legend_label' in marker_kwargs:
+    if "legend_label" in marker_kwargs:
         raise RuntimeError("'legend_label' cannot be a key in `marker_kwargs`.")
 
     return marker_kwargs
@@ -222,10 +252,12 @@ def _check_marker_kwargs(marker_kwargs):
 
 def _check_marker(marker):
     if marker not in bokeh.core.enums.MarkerType:
-        err_str = f"{marker} is an invalid marker specification. Acceptable values are ["
+        err_str = (
+            f"{marker} is an invalid marker specification. Acceptable values are ["
+        )
         for marker in list(bokeh.core.enums.MarkerType)[:-1]:
             err_str += f"{marker}, "
-        err_str += list(bokeh.core.enums.MarkerType)[-1] + '].'
+        err_str += list(bokeh.core.enums.MarkerType)[-1] + "]."
 
         raise RuntimeError(err_str)
 
@@ -233,7 +265,7 @@ def _check_marker(marker):
 
 
 def _source_and_labels_from_cats(df, cats):
-    if type(cats) in [list, tuple]:
+    if isinstance(cats, (list, tuple)):
         cat_source = list(zip(*tuple([df[cat].astype(str) for cat in cats])))
         return cat_source, [", ".join(cat) for cat in cat_source]
     else:
@@ -244,12 +276,12 @@ def _source_and_labels_from_cats(df, cats):
 def _tooltip_cols(tooltips):
     if tooltips is None:
         return []
-    if type(tooltips) not in [list, tuple]:
+    if not isinstance(tooltips, (list, tuple)):
         raise RuntimeError("`tooltips` must be a list or tuple of two-tuples.")
 
     cols = []
     for tip in tooltips:
-        if type(tip) not in [list, tuple] or len(tip) != 2:
+        if not isinstance(tip, (list, tuple)) or len(tip) != 2:
             raise RuntimeError("Invalid tooltip.")
         if tip[1][0] == "@":
             if tip[1][1] == "{":
@@ -266,7 +298,7 @@ def _cols_to_keep(cats, q, color_column, tooltips):
     cols = _tooltip_cols(tooltips)
     cols += [q]
 
-    if type(cats) in [list, tuple]:
+    if isinstance(cats, (list, tuple)):
         cols += list(cats)
     else:
         cols += [cats]
@@ -287,13 +319,13 @@ def _check_cat_input(
     if q is None:
         raise RuntimeError("`q` argument must be provided.")
 
-    if type(palette) not in [list, tuple, str]:
+    if not isinstance(palette, (list, tuple, str)):
         raise RuntimeError("`palette` must be a list, tuple or string.")
 
     if q not in df.columns:
         raise RuntimeError(f"{q} is not a column in the inputted data frame")
 
-    cats_array = type(cats) in [list, tuple]
+    cats_array = isinstance(cats, (list, tuple))
     if cats_array and len(cats) == 1:
         cats = cats[0]
         cats_array = False
@@ -303,7 +335,7 @@ def _check_cat_input(
             if cat not in df.columns:
                 raise RuntimeError(f"{cat} is not a column in the inputted data frame")
     else:
-        if type(cats) == tuple:
+        if isinstance(cats, tuple):
             raise RuntimeError(
                 "Cannot have tuples as data frame column names if there is only one categorical variable."
             )
@@ -333,7 +365,8 @@ def _check_cat_input(
         grouped = df.groupby(cats)
         if grouped.ngroups > len(order):
             raise RuntimeError(
-                "`order` must have at least as many elements as the number of unique groups in `cats`.")
+                "`order` must have at least as many elements as the number of unique groups in `cats`."
+            )
         for entry in order:
             if entry not in grouped.groups.keys():
                 raise RuntimeError(
@@ -388,7 +421,7 @@ def _specific_fill_and_color_kwargs(kwargs, kwarg_type):
 def _convert_data(data, inf_ok=False, min_len=1):
     """
     Convert inputted 1D data set into NumPy array of floats.
-    All nan's are dropped.
+    All NaNs are dropped.
 
     Parameters
     ----------
@@ -422,7 +455,7 @@ def _convert_data(data, inf_ok=False, min_len=1):
     if not inf_ok and np.isinf(data).any():
         raise RuntimeError("All entries must be finite.")
 
-    # Check to minimal length
+    # Check for minimal length
     if len(data) < min_len:
         raise RuntimeError(
             "Array must have at least {0:d} non-NaN entries.".format(min_len)
@@ -436,7 +469,7 @@ def _edge_value_given(p_edge_value):
     ret_val = True
 
     if p_edge_value is None:
-         ret_val = False
+        ret_val = False
     else:
         try:
             if np.isnan(p_edge_value):
@@ -454,7 +487,7 @@ def _range_specified(axis_range):
     Missing x_range and y_range start and end values are None in
     Bokeh 2.x and np.nan in Bokeh 3.x. This checks to see if the start
     and end attributes of a Range1d instance are None or nan and returns
-    True is not.
+    True if not.
     """
     return _edge_value_given(axis_range.start), _edge_value_given(axis_range.end)
 

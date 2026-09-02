@@ -1,5 +1,0 @@
-numpy
-xarray
-pandas
-bokeh
-colorcet
