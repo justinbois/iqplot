@@ -92,6 +92,7 @@ ipykernel = "*"
 nbval = "*"
 black = "*"
 hatch = "*"
+twine = "*"
 
 [tool.pixi.feature.dev.pypi-dependencies]
 bokeh_sampledata = "*"
@@ -109,6 +110,7 @@ jupyter = "*"
 test = "pytest --nbval-lax test/test_plots.ipynb"
 lab = "jupyter lab"
 build = "hatch build"
+upload = "hatch build && twine upload dist/*"
 
 [tool.pixi.feature.doc.tasks]
 doc = { cmd = "make html", cwd = "doc" }

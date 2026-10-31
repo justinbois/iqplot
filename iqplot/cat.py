@@ -343,17 +343,17 @@ def strip(
                 q_range = [p.y_range.start, p.y_range.end]
         else:
             if log_q:
-                q_range_width = np.log10(data[q]).max() - np.log10(data[q]).min()
-                q_range = [
-                    np.log10(data[q]).min() - 0.05 * q_range_width,
-                    np.log10(data[q]).max() + 0.05 * q_range_width,
-                ]
+                q_min, q_max = np.log10(data[q]).min(), np.log10(data[q]).max()
             else:
-                q_range_width = data[q].max() - data[q].min()
-                q_range = [
-                    data[q].min() - 0.05 * q_range_width,
-                    data[q].max() + 0.05 * q_range_width,
-                ]
+                q_min, q_max = data[q].min(), data[q].max()
+
+            q_range_width = q_max - q_min
+            if q_range_width == 0:
+                # Single unique value: any nonzero width works since all
+                # points are at the same pixel position.
+                q_range_width = 1.0
+
+            q_range = [q_min - 0.05 * q_range_width, q_max + 0.05 * q_range_width]
 
         swarm_transform = (
             grouped[q]
@@ -1715,6 +1715,11 @@ def _swarm_px(
         raise NotImplementedError("'random' priority is not yet implemented.")
     else:
         raise NotImplementedError("Custom `priority` not yet implemented.")
+
+    if not np.isfinite(x_range).all() or x_range[1] == x_range[0]:
+        raise RuntimeError(
+            "Quantitative axis range is degenerate; cannot compute swarm."
+        )
 
     x_pixels = (x[inds] - x_range[0]) * frame_width / (x_range[1] - x_range[0])
     y_pixels = np.inf * np.ones_like(x_pixels)
